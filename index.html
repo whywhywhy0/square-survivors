@@ -37,6 +37,41 @@ canvas { display:block; }
 @keyframes pill-in { from{transform:scale(0.5);opacity:0} to{transform:scale(1);opacity:1} }
 .buff-pill .btimer { font-size:10px; opacity:0.7; }
 
+/* Milestone perk overlay */
+#perk-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.92);
+  display:none; flex-direction:column; align-items:center; justify-content:center;
+  gap:22px; z-index:25;
+}
+#perk-overlay.show { display:flex; }
+#perk-overlay h2 {
+  font-size:36px; font-weight:900;
+  background:linear-gradient(135deg,#fbbf24,#f97316);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+}
+#perk-overlay .sub { font-size:13px; color:#888; }
+.perk-cards { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
+.perk-card {
+  width:175px; background:rgba(251,191,36,0.05);
+  border:2px solid rgba(251,191,36,0.2); border-radius:14px;
+  padding:20px 14px; cursor:pointer; text-align:center; transition:all .15s;
+}
+.perk-card:hover { border-color:#fbbf24; background:rgba(251,191,36,0.12); transform:translateY(-4px);
+  box-shadow:0 8px 28px rgba(251,191,36,0.25); }
+.perk-card .picon { font-size:36px; }
+.perk-card .pname { font-size:15px; font-weight:700; color:#fde68a; margin:8px 0 4px; }
+.perk-card .pdesc { font-size:11px; color:#aaa; line-height:1.5; }
+.perk-card .pstacks { font-size:11px; color:#fbbf24; margin-top:8px; font-weight:600; }
+
+/* Perk stat badges in HUD */
+#perk-badges {
+  display:flex; gap:6px; align-items:center;
+}
+.perk-badge {
+  font-size:11px; font-weight:700; padding:2px 7px; border-radius:50px;
+  background:rgba(251,191,36,0.15); border:1px solid rgba(251,191,36,0.35); color:#fde68a;
+}
+
 #attack-bar {
   position:fixed; bottom:12px; left:50%; transform:translateX(-50%);
   display:flex; gap:8px; z-index:5; pointer-events:none;
@@ -116,8 +151,15 @@ canvas { display:block; }
   <div id="xp-wrap"><div id="xp-bar"></div></div>
   <div class="hud-group"><div class="hud-lbl">Kills</div><div class="hud-val" id="hkl">0</div></div>
   <div class="hud-group"><div class="hud-lbl">Mastered</div><div class="hud-val" id="hms">0/10</div></div>
+  <div id="perk-badges"></div>
 </div>
 <div id="buff-row"></div>
+
+<div id="perk-overlay">
+  <h2>⚡ Milestone Perk</h2>
+  <div class="sub" id="perk-sub">Every 10 levels — choose a permanent upgrade</div>
+  <div class="perk-cards" id="perk-cards"></div>
+</div>
 
 <div id="attack-bar"></div>
 <div id="controls-hint">WASD / Arrow Keys to move</div>
@@ -173,7 +215,7 @@ const DEFS = [
     fire(S, l) {
       const s = DEFS[2].stat(l);
       let t = nearest(S); if (!t) return;
-      const seen = new Set(); let dmg = s.dmg * S.p.dmgMult;
+      const seen = new Set(); let dmg = s.dmg * tdm(S);
       for (let c = 0; c <= s.chains && t; c++) {
         t.hp -= dmg; t.flash = 150; seen.add(t);
         fx(S,{type:'bolt',x:t.x,y:t.y,life:250});
@@ -191,7 +233,7 @@ const DEFS = [
       const s = DEFS[3].stat(l);
       for (const e of S.enemies) {
         if (dist2(e.x,e.y,S.p.wx,S.p.wy) < (s.rad+e.sz)*(s.rad+e.sz)) {
-          e.hp -= s.dmg * S.p.dmgMult; e.flash = 100;
+          e.hp -= s.dmg * tdm(S); e.flash = 100;
           fx(S,{type:'hit',x:e.x,y:e.y,life:180,color:'#34d399'});
         }
       }
@@ -204,7 +246,7 @@ const DEFS = [
     fire(S, l) {
       const s = DEFS[4].stat(l);
       fx(S,{type:'wave',x:S.p.wx,y:S.p.wy,life:450,maxR:s.maxR,r:0,
-             dmg:s.dmg*S.p.dmgMult,kb:s.kb,hit:new Set()});
+             dmg:s.dmg*tdm(S),kb:s.kb,hit:new Set()});
     }
   },
   {
@@ -227,7 +269,7 @@ const DEFS = [
     fire(S, l) {
       const s = DEFS[6].stat(l);
       for (const e of S.enemies) {
-        e.hp -= s.dmg * S.p.dmgMult; e.flash = 200;
+        e.hp -= s.dmg * tdm(S); e.flash = 200;
         e.slow = Math.max(0.15, s.slowF); e.slowT = s.slowT;
       }
       fx(S,{type:'quake',x:S.p.wx,y:S.p.wy,life:600});
@@ -240,7 +282,7 @@ const DEFS = [
     fire(S, l) {
       const s = DEFS[7].stat(l);
       fx(S,{type:'poison',x:S.p.wx,y:S.p.wy,life:s.dur,rad:s.rad,
-             dmg:s.dmg*S.p.dmgMult,tick:Math.max(150,s.tick),tickT:0});
+             dmg:s.dmg*tdm(S),tick:Math.max(150,s.tick),tickT:0});
     }
   },
   {
@@ -258,9 +300,37 @@ const DEFS = [
       for (let i=0; i<s.count; i++) {
         const t = S.enemies[Math.floor(Math.random()*S.enemies.length)]; if (!t) continue;
         const mx = t.x+(Math.random()-.5)*70, my = t.y+(Math.random()-.5)*70;
-        fx(S,{type:'meteor',x:mx,y:my,life:900,total:900,rad:s.rad,dmg:s.dmg*S.p.dmgMult,done:false});
+        fx(S,{type:'meteor',x:mx,y:my,life:900,total:900,rad:s.rad,dmg:s.dmg*tdm(S),done:false});
       }
     }
+  },
+];
+
+// ─── PERK DEFINITIONS ─────────────────────────────────────────────────────────
+const PERKS = [
+  {
+    id:'power', icon:'💪', name:'Power',
+    desc:'Permanently deal +25% more damage with all attacks.',
+    badge: n => `⚔️ ×${(Math.pow(1.25,n)).toFixed(2)}`,
+    apply(p) { p.permDmgMult *= 1.25; },
+  },
+  {
+    id:'armor', icon:'🛡️', name:'Resilience',
+    desc:'Reduce all incoming damage by 15% (stacks additively, cap 75%).',
+    badge: n => `🛡 -${Math.min(75,n*15)}%`,
+    apply(p) { p.dmgReduction = Math.min(0.75, p.dmgReduction + 0.15); },
+  },
+  {
+    id:'agility', icon:'🏃', name:'Agility',
+    desc:'Permanently move 20% faster.',
+    badge: n => `💨 ×${(Math.pow(1.20,n)).toFixed(2)}`,
+    apply(p) { p.permSpdMult *= 1.20; },
+  },
+  {
+    id:'regen', icon:'💚', name:'Vitality',
+    desc:'Passively regenerate 3 HP per second.',
+    badge: n => `💚 ${n*3}/s`,
+    apply(p) { p.regenRate += 3; },
   },
 ];
 
@@ -279,8 +349,9 @@ const nearest = S => { let b=null,bd=Infinity; for(const e of S.enemies){const d
 const dist2 = (ax,ay,bx,by) => (ax-bx)**2+(ay-by)**2;
 const dist  = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
 const dir   = (ax,ay,bx,by) => { const l=Math.hypot(bx-ax,by-ay)||1; return [(bx-ax)/l,(by-ay)/l]; };
-// proj applies current dmgMult
-const proj  = (S,p) => S.projs.push({...p, hits:0, dmg: p.dmg * S.p.dmgMult});
+// total damage multiplier = permanent perk mult × active buff mult
+const tdm   = S => S.p.permDmgMult * S.p.dmgMult;
+const proj  = (S,p) => S.projs.push({...p, hits:0, dmg: p.dmg * tdm(S)});
 const fx    = (S,e) => S.fxs.push(e);
 const W = 3000;
 
@@ -291,15 +362,18 @@ function mkState() {
   return {
     p: { wx:0,wy:0,sz:20,hp:150,maxHp:150,spd:185,itime:0,
          level:1,xp:0,xpNext:100,kills:0,
-         dmgMult:1, spdMult:1 },
+         dmgMult:1, spdMult:1,
+         permDmgMult:1, permSpdMult:1, dmgReduction:0, regenRate:0,
+         perks:{ power:0, armor:0, agility:0, regen:0 } },
     atks: [],
     enemies: [],
     projs: [],
     fxs: [],
     items: [],
-    buffs: { dmg:0, spd:0 },   // remaining ms for each buff
+    buffs: { dmg:0, spd:0 },
+    pendingPerk: false,
     itemSpawnT: 0,
-    itemSpawnI: 18000,          // spawn item every 18s
+    itemSpawnI: 18000,
     laserAngle: 0,
     spawnT: 0, spawnI: 2000,
     time: 0,
@@ -376,6 +450,7 @@ function checkXP() {
     p.xpNext = Math.floor(100 * Math.pow(1.28, p.level-1));
     p.maxHp += 15;
     p.hp = Math.min(p.hp+25, p.maxHp);
+    if (p.level % 10 === 0) S.pendingPerk = true;
     showLevelUp();
   }
 }
@@ -418,9 +493,56 @@ function pick(ch) {
     S.atks.push({id:ch.id, level:1, cd:0});
   }
   document.getElementById('overlay').classList.remove('show');
-  paused = false;
   renderBar();
-  if (S.atks.filter(a=>a.level>=10).length === DEFS.length) showVictory();
+  if (S.atks.filter(a=>a.level>=10).length === DEFS.length) { showVictory(); return; }
+  if (S.pendingPerk) { S.pendingPerk = false; showPerkSelection(); }
+  else paused = false;
+}
+
+function showPerkSelection() {
+  paused = true;
+  const p = S.p;
+  document.getElementById('perk-sub').textContent =
+    `Level ${p.level} milestone — choose a permanent upgrade`;
+  const cc = document.getElementById('perk-cards');
+  cc.innerHTML = '';
+  for (const pk of PERKS) {
+    const stacks = p.perks[pk.id];
+    const card = document.createElement('div');
+    card.className = 'perk-card';
+    card.innerHTML = `<div class="picon">${pk.icon}</div>
+      <div class="pname">${pk.name}</div>
+      <div class="pdesc">${pk.desc}</div>
+      <div class="pstacks">${stacks > 0 ? `Taken ${stacks}× — currently ${pk.badge(stacks)}` : 'Not yet taken'}</div>`;
+    card.onclick = () => pickPerk(pk.id);
+    cc.appendChild(card);
+  }
+  document.getElementById('perk-overlay').classList.add('show');
+}
+
+function pickPerk(id) {
+  const p = S.p;
+  const pk = PERKS.find(pk => pk.id === id);
+  pk.apply(p);
+  p.perks[id]++;
+  document.getElementById('perk-overlay').classList.remove('show');
+  paused = false;
+  updatePerkBadges();
+  fx(S,{type:'pickup',x:p.wx,y:p.wy,life:1400,label:`${pk.icon} ${pk.name}!`,color:'#fbbf24'});
+}
+
+function updatePerkBadges() {
+  const badges = document.getElementById('perk-badges');
+  badges.innerHTML = '';
+  const p = S.p;
+  for (const pk of PERKS) {
+    if (p.perks[pk.id] > 0) {
+      const b = document.createElement('div');
+      b.className = 'perk-badge';
+      b.textContent = pk.badge(p.perks[pk.id]);
+      badges.appendChild(b);
+    }
+  }
 }
 
 function shuffle(a) {
@@ -443,9 +565,14 @@ function update(dt) {
   if (keys.ArrowUp||keys.w||keys.W)    my-=1;
   if (keys.ArrowDown||keys.s||keys.S)  my+=1;
   if (mx&&my){mx*=.707;my*=.707;}
-  p.wx = Math.max(-W/2, Math.min(W/2, p.wx + mx*p.spd*p.spdMult*dt));
-  p.wy = Math.max(-W/2, Math.min(W/2, p.wy + my*p.spd*p.spdMult*dt));
+  p.wx = Math.max(-W/2, Math.min(W/2, p.wx + mx*p.spd*p.spdMult*p.permSpdMult*dt));
+  p.wy = Math.max(-W/2, Math.min(W/2, p.wy + my*p.spd*p.spdMult*p.permSpdMult*dt));
   if (p.itime>0) p.itime -= dt*1000;
+
+  // Passive HP regen
+  if (p.regenRate > 0 && p.hp < p.maxHp) {
+    p.hp = Math.min(p.maxHp, p.hp + p.regenRate * dt);
+  }
 
   // Buff timers
   if (S.buffs.dmg > 0) {
@@ -528,7 +655,7 @@ function update(dt) {
       let diff = ((ang - S.laserAngle) % (Math.PI*2) + Math.PI*2) % (Math.PI*2);
       if (diff > Math.PI) diff = Math.PI*2-diff;
       const d = Math.hypot(e.x-p.wx, e.y-p.wy);
-      if (diff < 0.12 && d < s.len) { e.hp -= s.dmg * p.dmgMult * dt*60; e.flash=80; }
+      if (diff < 0.12 && d < s.len) { e.hp -= s.dmg * tdm(S) * dt*60; e.flash=80; }
     }
 
     // Move toward player
@@ -536,9 +663,9 @@ function update(dt) {
     e.x += dx*e.spd*e.slow*dt;
     e.y += dy*e.spd*e.slow*dt;
 
-    // Contact damage
+    // Contact damage (reduced by armor perk)
     if (dist2(e.x,e.y,p.wx,p.wy)<(e.sz+p.sz)**2 && p.itime<=0) {
-      p.hp -= e.dmg; p.itime=800;
+      p.hp -= e.dmg * (1 - p.dmgReduction); p.itime=800;
       if (p.hp<=0) { p.hp=0; updateHUD(); showGameOver(); return; }
     }
 
@@ -875,8 +1002,9 @@ function restart() {
   document.getElementById('gameover').classList.remove('show');
   document.getElementById('victory').classList.remove('show');
   document.getElementById('overlay').classList.remove('show');
+  document.getElementById('perk-overlay').classList.remove('show');
   S=mkState(); paused=false;
-  updateHUD(); renderBar();
+  updateHUD(); renderBar(); updatePerkBadges();
   setTimeout(()=>{ S.p.xp=S.p.xpNext; checkXP(); },200);
 }
 
