@@ -332,6 +332,12 @@ const PERKS = [
     badge: n => `💚 ${n*3}/s`,
     apply(p) { p.regenRate += 3; },
   },
+  {
+    id:'maxhp', icon:'❤️‍🔥', name:'Fortitude',
+    desc:'Permanently increase max HP by 50 and heal for the same amount.',
+    badge: n => `❤️ +${n*50} HP`,
+    apply(p) { p.maxHp += 50; p.hp = Math.min(p.hp + 50, p.maxHp); },
+  },
 ];
 
 // ─── ITEM DEFINITIONS ─────────────────────────────────────────────────────────
@@ -364,7 +370,7 @@ function mkState() {
          level:1,xp:0,xpNext:100,kills:0,
          dmgMult:1, spdMult:1,
          permDmgMult:1, permSpdMult:1, dmgReduction:0, regenRate:0,
-         perks:{ power:0, armor:0, agility:0, regen:0 } },
+         perks:{ power:0, armor:0, agility:0, regen:0, maxhp:0 } },
     atks: [],
     enemies: [],
     projs: [],
@@ -499,11 +505,15 @@ function pick(ch) {
   else paused = false;
 }
 
-function showPerkSelection() {
+function showPerkSelection(isStart=false) {
   paused = true;
+  S._perkIsStart = isStart;
   const p = S.p;
-  document.getElementById('perk-sub').textContent =
-    `Level ${p.level} milestone — choose a permanent upgrade`;
+  const el = document.getElementById('perk-overlay').querySelector('h2');
+  el.textContent = isStart ? '✨ Choose Your Starting Perk' : '⚡ Milestone Perk';
+  document.getElementById('perk-sub').textContent = isStart
+    ? 'Pick a permanent bonus to begin your run'
+    : `Level ${p.level} milestone — choose a permanent upgrade`;
   const cc = document.getElementById('perk-cards');
   cc.innerHTML = '';
   for (const pk of PERKS) {
@@ -513,7 +523,7 @@ function showPerkSelection() {
     card.innerHTML = `<div class="picon">${pk.icon}</div>
       <div class="pname">${pk.name}</div>
       <div class="pdesc">${pk.desc}</div>
-      <div class="pstacks">${stacks > 0 ? `Taken ${stacks}× — currently ${pk.badge(stacks)}` : 'Not yet taken'}</div>`;
+      <div class="pstacks">${isStart ? 'Starting bonus' : stacks > 0 ? `Taken ${stacks}× — currently ${pk.badge(stacks)}` : 'Not yet taken'}</div>`;
     card.onclick = () => pickPerk(pk.id);
     cc.appendChild(card);
   }
@@ -526,9 +536,17 @@ function pickPerk(id) {
   pk.apply(p);
   p.perks[id]++;
   document.getElementById('perk-overlay').classList.remove('show');
-  paused = false;
   updatePerkBadges();
-  fx(S,{type:'pickup',x:p.wx,y:p.wy,life:1400,label:`${pk.icon} ${pk.name}!`,color:'#fbbf24'});
+  updateHUD();
+  if (S._perkIsStart) {
+    S._perkIsStart = false;
+    // Now show first attack selection
+    S.p.xp = S.p.xpNext;
+    checkXP();
+  } else {
+    paused = false;
+    fx(S,{type:'pickup',x:p.wx,y:p.wy,life:1400,label:`${pk.icon} ${pk.name}!`,color:'#fbbf24'});
+  }
 }
 
 function updatePerkBadges() {
@@ -935,6 +953,68 @@ function render() {
   cx.restore();
 
   renderBar();
+  renderMinimap();
+}
+
+function renderMinimap() {
+  const MM = 155, PAD = 14;
+  const mx = cv.width - MM - PAD;
+  const my = cv.height - MM - PAD - 82; // sits above attack bar
+  const scale = MM / W;
+  const mcx = mx + MM/2, mcy = my + MM/2;
+
+  cx.save();
+
+  // Background panel
+  cx.fillStyle = 'rgba(0,0,0,0.72)';
+  cx.strokeStyle = 'rgba(255,255,255,0.12)';
+  cx.lineWidth = 1;
+  cx.beginPath(); cx.roundRect(mx-1, my-1, MM+2, MM+2, 7); cx.fill(); cx.stroke();
+
+  // Clip to minimap
+  cx.beginPath(); cx.rect(mx, my, MM, MM); cx.clip();
+
+  // World border (red edge)
+  cx.strokeStyle = 'rgba(255,60,60,0.3)'; cx.lineWidth = 1;
+  cx.strokeRect(mx, my, MM, MM);
+
+  // Items
+  for (const item of S.items) {
+    const def = ITEM_DEFS[item.type];
+    const ix = mcx + item.x*scale, iy = mcy + item.y*scale;
+    if (ix<mx||ix>mx+MM||iy<my||iy>my+MM) continue;
+    cx.fillStyle = def.color; cx.shadowColor = def.color; cx.shadowBlur = 4;
+    cx.beginPath(); cx.arc(ix, iy, 3, 0, Math.PI*2); cx.fill();
+    cx.shadowBlur = 0;
+  }
+
+  // Enemies
+  for (const e of S.enemies) {
+    const ex = mcx + e.x*scale, ey = mcy + e.y*scale;
+    if (ex<mx||ex>mx+MM||ey<my||ey>my+MM) continue;
+    cx.fillStyle = e.elite ? '#ff2255' : '#ef4444';
+    cx.beginPath(); cx.arc(ex, ey, e.elite ? 2.5 : 1.5, 0, Math.PI*2); cx.fill();
+  }
+
+  // Viewport indicator (what the player can currently see)
+  const vw = (cv.width / W) * MM * 0.5, vh = (cv.height / W) * MM * 0.5;
+  cx.strokeStyle = 'rgba(255,255,255,0.12)'; cx.lineWidth = 1;
+  cx.strokeRect(mcx - vw, mcy - vh, vw*2, vh*2);
+
+  // Player dot
+  cx.fillStyle = '#3b82f6'; cx.shadowColor = '#3b82f6'; cx.shadowBlur = 8;
+  cx.fillRect(mcx - 3, mcy - 3, 6, 6);
+  cx.shadowBlur = 0;
+
+  cx.restore();
+
+  // "MAP" label
+  cx.save();
+  cx.font = 'bold 9px Segoe UI, sans-serif';
+  cx.fillStyle = 'rgba(255,255,255,0.3)';
+  cx.textAlign = 'left'; cx.textBaseline = 'top';
+  cx.fillText('MAP', mx + 5, my + 4);
+  cx.restore();
 }
 
 // ─── HUD ──────────────────────────────────────────────────────────────────────
@@ -1003,9 +1083,9 @@ function restart() {
   document.getElementById('victory').classList.remove('show');
   document.getElementById('overlay').classList.remove('show');
   document.getElementById('perk-overlay').classList.remove('show');
-  S=mkState(); paused=false;
+  S=mkState(); paused=true;
   updateHUD(); renderBar(); updatePerkBadges();
-  setTimeout(()=>{ S.p.xp=S.p.xpNext; checkXP(); },200);
+  setTimeout(()=>{ showPerkSelection(true); }, 150);
 }
 
 // ─── LOOP ─────────────────────────────────────────────────────────────────────
@@ -1022,8 +1102,9 @@ window.addEventListener('keyup',   e=>{ keys[e.key]=false; });
 
 resize();
 S=mkState();
+paused=true;
 updateHUD();
-setTimeout(()=>{ S.p.xp=S.p.xpNext; checkXP(); },300);
+setTimeout(()=>{ showPerkSelection(true); }, 300);
 requestAnimationFrame(ts=>{ lastT=ts; requestAnimationFrame(loop); });
 </script>
 </body>
