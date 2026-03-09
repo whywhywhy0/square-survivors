@@ -338,6 +338,12 @@ const PERKS = [
     badge: n => `❤️ +${n*50} HP`,
     apply(p) { p.maxHp += 50; p.hp = Math.min(p.hp + 50, p.maxHp); },
   },
+  {
+    id:'haste', icon:'⏩', name:'Haste',
+    desc:'Reduce all attack cooldowns by 10% (stacks additively, cap 70%).',
+    badge: n => `⏩ -${Math.min(70,n*10)}% CD`,
+    apply(p) { p.cdReduction = Math.min(0.70, p.cdReduction + 0.10); },
+  },
 ];
 
 // ─── ITEM DEFINITIONS ─────────────────────────────────────────────────────────
@@ -369,15 +375,16 @@ function mkState() {
     p: { wx:0,wy:0,sz:20,hp:150,maxHp:150,spd:185,itime:0,
          level:1,xp:0,xpNext:100,kills:0,
          dmgMult:1, spdMult:1,
-         permDmgMult:1, permSpdMult:1, dmgReduction:0, regenRate:0,
-         perks:{ power:0, armor:0, agility:0, regen:0, maxhp:0 } },
+         permDmgMult:1, permSpdMult:1, dmgReduction:0, regenRate:0, cdReduction:0,
+         perks:{ power:0, armor:0, agility:0, regen:0, maxhp:0, haste:0 } },
     atks: [],
     enemies: [],
     projs: [],
     fxs: [],
     items: [],
     buffs: { dmg:0, spd:0 },
-    pendingPerk: false,
+    pendingPerks: 0,
+    perkReason: '',
     itemSpawnT: 0,
     itemSpawnI: 18000,
     laserAngle: 0,
@@ -456,7 +463,7 @@ function checkXP() {
     p.xpNext = Math.floor(100 * Math.pow(1.28, p.level-1));
     p.maxHp += 15;
     p.hp = Math.min(p.hp+25, p.maxHp);
-    if (p.level % 10 === 0) S.pendingPerk = true;
+    if (p.level % 10 === 0) { S.pendingPerks++; S.perkReason = `Level ${p.level} milestone`; }
     showLevelUp();
   }
 }
@@ -493,15 +500,22 @@ function showLevelUp() {
 }
 
 function pick(ch) {
+  let mastered = false;
   if (ch.type==='up') {
-    S.atks.find(a=>a.id===ch.id).level++;
+    const atk = S.atks.find(a=>a.id===ch.id);
+    atk.level++;
+    if (atk.level === 10) {
+      mastered = true;
+      S.pendingPerks++;
+      S.perkReason = `${DEFS[ch.id].icon} ${DEFS[ch.id].name} mastered!`;
+    }
   } else {
     S.atks.push({id:ch.id, level:1, cd:0});
   }
   document.getElementById('overlay').classList.remove('show');
   renderBar();
   if (S.atks.filter(a=>a.level>=10).length === DEFS.length) { showVictory(); return; }
-  if (S.pendingPerk) { S.pendingPerk = false; showPerkSelection(); }
+  if (S.pendingPerks > 0) { S.pendingPerks--; showPerkSelection(); }
   else paused = false;
 }
 
@@ -510,10 +524,10 @@ function showPerkSelection(isStart=false) {
   S._perkIsStart = isStart;
   const p = S.p;
   const el = document.getElementById('perk-overlay').querySelector('h2');
-  el.textContent = isStart ? '✨ Choose Your Starting Perk' : '⚡ Milestone Perk';
+  el.textContent = isStart ? '✨ Choose Your Starting Perk' : '⚡ Perk Unlocked!';
   document.getElementById('perk-sub').textContent = isStart
     ? 'Pick a permanent bonus to begin your run'
-    : `Level ${p.level} milestone — choose a permanent upgrade`;
+    : `${S.perkReason} — choose a permanent upgrade`;
   const cc = document.getElementById('perk-cards');
   cc.innerHTML = '';
   for (const pk of PERKS) {
@@ -639,7 +653,7 @@ function update(dt) {
     if (a.id===8) continue;
     const s = DEFS[a.id].stat(a.level);
     a.cd -= dt*1000;
-    if (a.cd <= 0) { DEFS[a.id].fire(S, a.level); a.cd = s.cd; }
+    if (a.cd <= 0) { DEFS[a.id].fire(S, a.level); a.cd = s.cd * (1 - S.p.cdReduction); }
   }
 
   // Projectiles
