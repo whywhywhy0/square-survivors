@@ -22,6 +22,21 @@ canvas { display:block; }
 #hp-bar { height:100%; background:#f87171; border-radius:4px; transition:width .1s; }
 #xp-bar { height:100%; background:#a78bfa; border-radius:4px; transition:width .15s; }
 
+/* Active buff pills */
+#buff-row {
+  position:fixed; top:58px; left:50%; transform:translateX(-50%);
+  display:flex; gap:8px; z-index:5; pointer-events:none;
+}
+.buff-pill {
+  display:flex; align-items:center; gap:5px;
+  padding:4px 10px; border-radius:50px;
+  font-size:12px; font-weight:700;
+  background:rgba(0,0,0,0.75); border:1.5px solid;
+  animation:pill-in .2s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes pill-in { from{transform:scale(0.5);opacity:0} to{transform:scale(1);opacity:1} }
+.buff-pill .btimer { font-size:10px; opacity:0.7; }
+
 #attack-bar {
   position:fixed; bottom:12px; left:50%; transform:translateX(-50%);
   display:flex; gap:8px; z-index:5; pointer-events:none;
@@ -40,8 +55,7 @@ canvas { display:block; }
 .aslot.maxed  { border-color:gold; box-shadow:0 0 8px rgba(255,215,0,0.5); }
 .aslot .cooldown-mask {
   position:absolute; bottom:0; left:0; right:0;
-  background:rgba(0,0,0,0.6);
-  transition:height .05s linear;
+  background:rgba(0,0,0,0.6); transition:height .05s linear;
 }
 
 #overlay {
@@ -59,8 +73,7 @@ canvas { display:block; }
 .card {
   width:190px; background:rgba(255,255,255,0.05);
   border:2px solid rgba(255,255,255,0.12); border-radius:14px;
-  padding:18px 14px; cursor:pointer; text-align:center;
-  transition:all .15s;
+  padding:18px 14px; cursor:pointer; text-align:center; transition:all .15s;
 }
 .card:hover { border-color:#a78bfa; background:rgba(167,139,250,0.12); transform:translateY(-4px); }
 .card.isnew { border-color:rgba(251,191,36,0.35); }
@@ -104,6 +117,7 @@ canvas { display:block; }
   <div class="hud-group"><div class="hud-lbl">Kills</div><div class="hud-val" id="hkl">0</div></div>
   <div class="hud-group"><div class="hud-lbl">Mastered</div><div class="hud-val" id="hms">0/10</div></div>
 </div>
+<div id="buff-row"></div>
 
 <div id="attack-bar"></div>
 <div id="controls-hint">WASD / Arrow Keys to move</div>
@@ -159,7 +173,7 @@ const DEFS = [
     fire(S, l) {
       const s = DEFS[2].stat(l);
       let t = nearest(S); if (!t) return;
-      const seen = new Set(); let dmg = s.dmg;
+      const seen = new Set(); let dmg = s.dmg * S.p.dmgMult;
       for (let c = 0; c <= s.chains && t; c++) {
         t.hp -= dmg; t.flash = 150; seen.add(t);
         fx(S,{type:'bolt',x:t.x,y:t.y,life:250});
@@ -177,7 +191,7 @@ const DEFS = [
       const s = DEFS[3].stat(l);
       for (const e of S.enemies) {
         if (dist2(e.x,e.y,S.p.wx,S.p.wy) < (s.rad+e.sz)*(s.rad+e.sz)) {
-          e.hp -= s.dmg; e.flash = 100;
+          e.hp -= s.dmg * S.p.dmgMult; e.flash = 100;
           fx(S,{type:'hit',x:e.x,y:e.y,life:180,color:'#34d399'});
         }
       }
@@ -190,7 +204,7 @@ const DEFS = [
     fire(S, l) {
       const s = DEFS[4].stat(l);
       fx(S,{type:'wave',x:S.p.wx,y:S.p.wy,life:450,maxR:s.maxR,r:0,
-             dmg:s.dmg,kb:s.kb,hit:new Set()});
+             dmg:s.dmg*S.p.dmgMult,kb:s.kb,hit:new Set()});
     }
   },
   {
@@ -213,7 +227,7 @@ const DEFS = [
     fire(S, l) {
       const s = DEFS[6].stat(l);
       for (const e of S.enemies) {
-        e.hp -= s.dmg; e.flash = 200;
+        e.hp -= s.dmg * S.p.dmgMult; e.flash = 200;
         e.slow = Math.max(0.15, s.slowF); e.slowT = s.slowT;
       }
       fx(S,{type:'quake',x:S.p.wx,y:S.p.wy,life:600});
@@ -226,14 +240,14 @@ const DEFS = [
     fire(S, l) {
       const s = DEFS[7].stat(l);
       fx(S,{type:'poison',x:S.p.wx,y:S.p.wy,life:s.dur,rad:s.rad,
-             dmg:s.dmg,tick:Math.max(150,s.tick),tickT:0});
+             dmg:s.dmg*S.p.dmgMult,tick:Math.max(150,s.tick),tickT:0});
     }
   },
   {
     id:8, name:'Laser Beam', icon:'🔆', color:'#e879f9',
     desc:'A rotating laser that continuously burns enemies.',
     stat: l => ({ dmg:4+l*2, len:150+l*25, w:3+l*0.5, rot:1.8+l*0.25 }),
-    fire() {} // handled per-frame
+    fire() {}
   },
   {
     id:9, name:'Meteor', icon:'☄️', color:'#fb7185',
@@ -244,18 +258,29 @@ const DEFS = [
       for (let i=0; i<s.count; i++) {
         const t = S.enemies[Math.floor(Math.random()*S.enemies.length)]; if (!t) continue;
         const mx = t.x+(Math.random()-.5)*70, my = t.y+(Math.random()-.5)*70;
-        fx(S,{type:'meteor',x:mx,y:my,life:900,total:900,rad:s.rad,dmg:s.dmg,done:false});
+        fx(S,{type:'meteor',x:mx,y:my,life:900,total:900,rad:s.rad,dmg:s.dmg*S.p.dmgMult,done:false});
       }
     }
   },
 ];
+
+// ─── ITEM DEFINITIONS ─────────────────────────────────────────────────────────
+const ITEM_DEFS = {
+  heal: { icon:'❤️', color:'#f87171', glowColor:'rgba(248,113,113,0.6)', label:'Healing Orb',
+          desc:'Restores 40% of your max HP instantly.' },
+  dmg:  { icon:'⚔️', color:'#fbbf24', glowColor:'rgba(251,191,36,0.6)',  label:'Power Shard',
+          desc:'+75% damage for 15 seconds.' },
+  spd:  { icon:'💨', color:'#67e8f9', glowColor:'rgba(103,232,249,0.6)', label:'Swift Rune',
+          desc:'+60% movement speed for 12 seconds.' },
+};
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const nearest = S => { let b=null,bd=Infinity; for(const e of S.enemies){const d=dist2(e.x,e.y,S.p.wx,S.p.wy); if(d<bd){bd=d;b=e;}} return b; };
 const dist2 = (ax,ay,bx,by) => (ax-bx)**2+(ay-by)**2;
 const dist  = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
 const dir   = (ax,ay,bx,by) => { const l=Math.hypot(bx-ax,by-ay)||1; return [(bx-ax)/l,(by-ay)/l]; };
-const proj  = (S,p) => S.projs.push({...p,hits:0});
+// proj applies current dmgMult
+const proj  = (S,p) => S.projs.push({...p, hits:0, dmg: p.dmg * S.p.dmgMult});
 const fx    = (S,e) => S.fxs.push(e);
 const W = 3000;
 
@@ -265,18 +290,61 @@ let S, keys={}, paused=false, lastT=0;
 function mkState() {
   return {
     p: { wx:0,wy:0,sz:20,hp:150,maxHp:150,spd:185,itime:0,
-         level:1,xp:0,xpNext:100,kills:0 },
-    atks: [],        // {id, level, cd}
+         level:1,xp:0,xpNext:100,kills:0,
+         dmgMult:1, spdMult:1 },
+    atks: [],
     enemies: [],
     projs: [],
     fxs: [],
+    items: [],
+    buffs: { dmg:0, spd:0 },   // remaining ms for each buff
+    itemSpawnT: 0,
+    itemSpawnI: 18000,          // spawn item every 18s
     laserAngle: 0,
     spawnT: 0, spawnI: 2000,
     time: 0,
   };
 }
 
-// ─── SPAWNING ─────────────────────────────────────────────────────────────────
+// ─── ITEM SPAWNING ────────────────────────────────────────────────────────────
+function spawnItem() {
+  // If player is low HP, bias toward heal
+  const types = ['heal', 'dmg', 'spd'];
+  let type = types[Math.floor(Math.random()*3)];
+  if (S.p.hp < S.p.maxHp * 0.35 && Math.random() < 0.65) type = 'heal';
+
+  // Spawn within reachable range around player
+  const angle = Math.random() * Math.PI * 2;
+  const r = 180 + Math.random() * 280;
+  S.items.push({
+    type,
+    x: S.p.wx + Math.cos(angle)*r,
+    y: S.p.wy + Math.sin(angle)*r,
+    life: 10000,     // disappears after 10s
+    maxLife: 10000,
+    bob: Math.random() * Math.PI * 2,
+  });
+}
+
+function applyItem(type) {
+  const p = S.p;
+  if (type === 'heal') {
+    const restore = Math.floor(p.maxHp * 0.4);
+    p.hp = Math.min(p.maxHp, p.hp + restore);
+    fx(S,{type:'pickup',x:p.wx,y:p.wy,life:1200,label:`+${restore} HP`,color:'#f87171'});
+  } else if (type === 'dmg') {
+    p.dmgMult = 1.75;
+    S.buffs.dmg = 15000;
+    fx(S,{type:'pickup',x:p.wx,y:p.wy,life:1200,label:'DMG ×1.75!',color:'#fbbf24'});
+  } else if (type === 'spd') {
+    p.spdMult = 1.6;
+    S.buffs.spd = 12000;
+    fx(S,{type:'pickup',x:p.wx,y:p.wy,life:1200,label:'SPEED ×1.6!',color:'#67e8f9'});
+  }
+  updateBuffRow();
+}
+
+// ─── ENEMY SPAWNING ───────────────────────────────────────────────────────────
 function spawnEnemy() {
   const side = Math.floor(Math.random()*4);
   const h = W/2;
@@ -286,13 +354,14 @@ function spawnEnemy() {
   else if (side===2) { x=Math.random()*W-h; y=h+30; }
   else               { x=-h-30; y=Math.random()*W-h; }
   const lv = S.p.level;
-  const elite = Math.random() < 0.08 + lv*0.015;
-  const hp = (25+lv*12)*(elite?3.5:1);
+  const t  = S.time;
+  const elite = Math.random() < 0.08 + lv*0.015 + t*0.0005;
+  const hpBase = (25 + lv*12 + t*0.8) * (elite ? 3.5 : 1);
   S.enemies.push({
     x,y, sz:elite?16:10,
-    hp, maxHp:hp,
-    spd:(45+lv*7)*(0.8+Math.random()*0.4),
-    dmg:(8+lv*3)*(elite?2:1),
+    hp:hpBase, maxHp:hpBase,
+    spd:(45 + lv*7 + t*0.5) * (0.8+Math.random()*0.4),
+    dmg:(8 + lv*3 + t*0.15) * (elite?2:1),
     xp: elite?45:10,
     slow:1, slowT:0, flash:0, elite,
   });
@@ -313,7 +382,6 @@ function checkXP() {
 
 function showLevelUp() {
   paused = true;
-  // Build choices
   const pool = [];
   for (const a of S.atks) {
     if (a.level < 10) pool.push({type:'up', id:a.id, nl:a.level+1});
@@ -325,8 +393,7 @@ function showLevelUp() {
   shuffle(pool);
   const choices = pool.slice(0,3);
 
-  const el = document.getElementById('ovtitle');
-  el.textContent = 'Level Up!';
+  document.getElementById('ovtitle').textContent = 'Level Up!';
   const cc = document.getElementById('cards');
   cc.innerHTML = '';
   for (const ch of choices) {
@@ -369,18 +436,28 @@ function update(dt) {
   const p = S.p;
   S.time += dt;
 
-  // Player move
+  // Player move (apply speed buff)
   let mx=0, my=0;
   if (keys.ArrowLeft||keys.a||keys.A)  mx-=1;
   if (keys.ArrowRight||keys.d||keys.D) mx+=1;
   if (keys.ArrowUp||keys.w||keys.W)    my-=1;
   if (keys.ArrowDown||keys.s||keys.S)  my+=1;
   if (mx&&my){mx*=.707;my*=.707;}
-  p.wx = Math.max(-W/2, Math.min(W/2, p.wx+mx*p.spd*dt));
-  p.wy = Math.max(-W/2, Math.min(W/2, p.wy+my*p.spd*dt));
+  p.wx = Math.max(-W/2, Math.min(W/2, p.wx + mx*p.spd*p.spdMult*dt));
+  p.wy = Math.max(-W/2, Math.min(W/2, p.wy + my*p.spd*p.spdMult*dt));
   if (p.itime>0) p.itime -= dt*1000;
 
-  // Spawn
+  // Buff timers
+  if (S.buffs.dmg > 0) {
+    S.buffs.dmg -= dt*1000;
+    if (S.buffs.dmg <= 0) { S.buffs.dmg=0; p.dmgMult=1; updateBuffRow(); }
+  }
+  if (S.buffs.spd > 0) {
+    S.buffs.spd -= dt*1000;
+    if (S.buffs.spd <= 0) { S.buffs.spd=0; p.spdMult=1; updateBuffRow(); }
+  }
+
+  // Enemy spawn
   S.spawnT += dt*1000;
   S.spawnI = Math.max(350, 2000 - S.time*6);
   while (S.spawnT >= S.spawnI) {
@@ -388,6 +465,25 @@ function update(dt) {
     for (let i=0;i<batch;i++) spawnEnemy();
     S.spawnT -= S.spawnI;
   }
+
+  // Item spawn
+  S.itemSpawnT += dt*1000;
+  if (S.itemSpawnT >= S.itemSpawnI) {
+    spawnItem();
+    S.itemSpawnT = 0;
+    S.itemSpawnI = 14000 + Math.random()*10000; // 14–24s between items
+  }
+
+  // Item update + pickup
+  S.items = S.items.filter(item => {
+    item.life -= dt*1000;
+    if (item.life <= 0) return false;
+    if (dist2(item.x,item.y,p.wx,p.wy) < (p.sz+14)**2) {
+      applyItem(item.type);
+      return false;
+    }
+    return true;
+  });
 
   // Laser angle
   const la = S.atks.find(a=>a.id===8);
@@ -425,14 +521,14 @@ function update(dt) {
     if (e.slowT>0) { e.slowT-=dt*1000; if(e.slowT<=0) e.slow=1; }
     if (e.flash>0) e.flash-=dt*1000;
 
-    // Laser damage (per-frame continuous)
+    // Laser damage
     if (la) {
       const s = DEFS[8].stat(la.level);
       const ang = Math.atan2(e.y-p.wy, e.x-p.wx);
       let diff = ((ang - S.laserAngle) % (Math.PI*2) + Math.PI*2) % (Math.PI*2);
       if (diff > Math.PI) diff = Math.PI*2-diff;
       const d = Math.hypot(e.x-p.wx, e.y-p.wy);
-      if (diff < 0.12 && d < s.len) { e.hp -= s.dmg*dt*60; e.flash=80; }
+      if (diff < 0.12 && d < s.len) { e.hp -= s.dmg * p.dmgMult * dt*60; e.flash=80; }
     }
 
     // Move toward player
@@ -440,7 +536,7 @@ function update(dt) {
     e.x += dx*e.spd*e.slow*dt;
     e.y += dy*e.spd*e.slow*dt;
 
-    // Contact
+    // Contact damage
     if (dist2(e.x,e.y,p.wx,p.wy)<(e.sz+p.sz)**2 && p.itime<=0) {
       p.hp -= e.dmg; p.itime=800;
       if (p.hp<=0) { p.hp=0; updateHUD(); showGameOver(); return; }
@@ -461,8 +557,7 @@ function update(dt) {
     if (e.life<=0) return false;
 
     if (e.type==='wave') {
-      const t = 1-(e.life/450);
-      e.r = e.maxR*t;
+      e.r = e.maxR*(1-e.life/450);
       for (const en of S.enemies) {
         if (e.hit.has(en)) continue;
         const d = Math.hypot(en.x-e.x, en.y-e.y);
@@ -485,8 +580,7 @@ function update(dt) {
     }
 
     if (e.type==='meteor' && !e.done) {
-      const prog = 1-e.life/e.total;
-      if (prog>=1) {
+      if (e.life/e.total <= 0) {
         e.done=true;
         for (const en of S.enemies) {
           if (dist2(en.x,en.y,e.x,e.y)<(e.rad+en.sz)**2) { en.hp-=e.dmg; en.flash=300; }
@@ -522,6 +616,45 @@ function render() {
   cx.strokeStyle='rgba(255,60,60,0.35)'; cx.lineWidth=3;
   cx.strokeRect(tx,ty,bx-tx,by-ty);
 
+  // ── Items ──
+  for (const item of S.items) {
+    const [sx,sy] = ws(item.x, item.y);
+    if (sx<-80||sx>cv.width+80||sy<-80||sy>cv.height+80) continue;
+    const def = ITEM_DEFS[item.type];
+    const bob = Math.sin(S.time*3 + item.bob) * 5;
+    const lifeFrac = item.life / item.maxLife;
+    // Blink when about to expire
+    if (lifeFrac < 0.3 && Math.floor(S.time*8)%2===0) continue;
+    const iy = sy + bob;
+
+    // Glow pulse
+    cx.save();
+    const pulse = 0.5 + 0.5*Math.sin(S.time*4 + item.bob);
+    cx.shadowColor = def.glowColor; cx.shadowBlur = 18 + pulse*12;
+    // Outer ring
+    cx.strokeStyle = def.color; cx.lineWidth = 2; cx.globalAlpha = 0.5 + pulse*0.4;
+    cx.beginPath(); cx.arc(sx, iy, 18, 0, Math.PI*2); cx.stroke();
+    // Inner square
+    cx.globalAlpha = 1;
+    cx.fillStyle = def.color + '33';
+    cx.fillRect(sx-11, iy-11, 22, 22);
+    cx.strokeStyle = def.color; cx.lineWidth = 2;
+    cx.strokeRect(sx-11, iy-11, 22, 22);
+    cx.restore();
+
+    // Icon
+    cx.font = '16px serif';
+    cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    cx.fillText(def.icon, sx, iy);
+
+    // Label above
+    cx.save();
+    cx.font = 'bold 10px Segoe UI, sans-serif';
+    cx.fillStyle = def.color; cx.textAlign = 'center'; cx.globalAlpha = 0.9;
+    cx.fillText(def.label, sx, iy - 22);
+    cx.restore();
+  }
+
   // ── Effects (bg layer) ──
   for (const e of S.fxs) {
     const [sx,sy]=ws(e.x,e.y);
@@ -529,17 +662,15 @@ function render() {
 
     if (e.type==='wave') {
       cx.beginPath(); cx.arc(sx,sy,e.r,0,Math.PI*2);
-      cx.strokeStyle=`rgba(249,115,22,${a})`;
-      cx.lineWidth=4; cx.stroke();
+      cx.strokeStyle=`rgba(249,115,22,${a})`; cx.lineWidth=4; cx.stroke();
     }
     if (e.type==='poison') {
       cx.beginPath(); cx.arc(sx,sy,e.rad,0,Math.PI*2);
       cx.fillStyle='rgba(74,222,128,0.07)'; cx.fill();
       cx.strokeStyle='rgba(74,222,128,0.25)'; cx.lineWidth=2; cx.stroke();
-      // particles
       for(let i=0;i<3;i++){
-        const pa = S.time*2+i*2.1, pr=e.rad*(0.3+Math.random()*0.6);
-        cx.beginPath(); cx.arc(sx+Math.cos(pa)*pr, sy+Math.sin(pa)*pr, 3,0,Math.PI*2);
+        const pa=S.time*2+i*2.1, pr=e.rad*(0.3+Math.random()*0.6);
+        cx.beginPath(); cx.arc(sx+Math.cos(pa)*pr,sy+Math.sin(pa)*pr,3,0,Math.PI*2);
         cx.fillStyle='rgba(74,222,128,0.5)'; cx.fill();
       }
     }
@@ -551,21 +682,20 @@ function render() {
       }
     }
     if (e.type==='meteor' && !e.done) {
-      const prog = 1-e.life/e.total;
+      const prog=1-e.life/e.total;
       cx.beginPath(); cx.arc(sx,sy,e.rad,0,Math.PI*2);
       cx.strokeStyle=`rgba(251,113,133,${0.25+prog*0.5})`; cx.lineWidth=2+prog*3; cx.stroke();
       cx.fillStyle=`rgba(251,113,133,${prog*0.18})`; cx.fill();
-      const mfall = sy - 200 + prog*200;
+      const mfall=sy-200+prog*200;
       cx.save(); cx.fillStyle='#fb7185'; cx.shadowColor='#fb7185'; cx.shadowBlur=18;
       cx.beginPath(); cx.arc(sx,mfall,8,0,Math.PI*2); cx.fill(); cx.restore();
-      // trail
       for(let t=1;t<=4;t++){
         cx.beginPath(); cx.arc(sx,mfall+t*12,5-t,0,Math.PI*2);
         cx.fillStyle=`rgba(251,113,133,${(5-t)/5*0.5})`; cx.fill();
       }
     }
     if (e.type==='explode') {
-      const r = e.rad*(1-a)*2.5;
+      const r=e.rad*(1-a)*2.5;
       cx.beginPath(); cx.arc(sx,sy,r,0,Math.PI*2);
       cx.fillStyle=`rgba(251,113,133,${a*0.5})`; cx.fill();
     }
@@ -575,6 +705,15 @@ function render() {
       let lx=sx+(Math.random()-.5)*20, ly=sy-30; cx.moveTo(lx,ly);
       for(let s=0;s<5;s++){lx+=(Math.random()-.5)*16;ly+=60/5;cx.lineTo(lx,ly);}
       cx.stroke(); cx.restore();
+    }
+    // Pickup floating text
+    if (e.type==='pickup') {
+      const frac = e.life/1200;
+      cx.save(); cx.globalAlpha=frac;
+      cx.font='bold 16px Segoe UI, sans-serif'; cx.textAlign='center';
+      cx.fillStyle=e.color; cx.shadowColor=e.color; cx.shadowBlur=8;
+      cx.fillText(e.label, sx, sy - (1-frac)*50);
+      cx.restore();
     }
   }
 
@@ -593,7 +732,6 @@ function render() {
     const col = e.flash>0 ? '#fff' : e.slow<0.9 ? '#a78bfa' : e.elite ? '#ff2255' : '#ef4444';
     cx.fillStyle=col; cx.shadowColor=e.elite?'#ff2255':'#ef4444'; cx.shadowBlur=e.elite?14:5;
     cx.fillRect(sx-e.sz, sy-e.sz, e.sz*2, e.sz*2);
-    // HP bar
     if (e.hp<e.maxHp) {
       const bw=e.sz*2.2;
       cx.fillStyle='rgba(0,0,0,0.6)'; cx.fillRect(sx-bw/2,sy-e.sz-9,bw,4);
@@ -619,6 +757,17 @@ function render() {
   // ── Player ──
   const [psx,psy]=[cv.width/2, cv.height/2];
 
+  // Speed trail when buff active
+  if (S.buffs.spd > 0 && (keys.ArrowLeft||keys.ArrowRight||keys.ArrowUp||keys.ArrowDown||
+      keys.a||keys.d||keys.w||keys.s||keys.A||keys.D||keys.W||keys.S)) {
+    cx.save(); cx.globalAlpha=0.25; cx.fillStyle='#67e8f9'; cx.shadowColor='#67e8f9'; cx.shadowBlur=8;
+    for(let i=1;i<=3;i++) {
+      cx.globalAlpha=0.08*(4-i);
+      cx.fillRect(psx-p.sz+i*2, psy-p.sz+i*2, p.sz*2, p.sz*2);
+    }
+    cx.restore();
+  }
+
   // Laser beam
   const la=S.atks.find(a=>a.id===8);
   if (la) {
@@ -643,12 +792,22 @@ function render() {
     }
   }
 
-  // Player square (flash when invincible)
+  // Player square
   cx.save();
   if (p.itime>0 && Math.floor(p.itime/80)%2===0) cx.globalAlpha=0.35;
-  cx.fillStyle='#3b82f6'; cx.shadowColor='#3b82f6'; cx.shadowBlur=18;
+  // Dmg buff glow
+  if (S.buffs.dmg > 0) { cx.shadowColor='#fbbf24'; cx.shadowBlur=24; }
+  else { cx.shadowColor='#3b82f6'; cx.shadowBlur=18; }
+  cx.fillStyle='#3b82f6';
   cx.fillRect(psx-p.sz, psy-p.sz, p.sz*2, p.sz*2);
+  // Dmg buff outline
+  if (S.buffs.dmg > 0) {
+    cx.strokeStyle='#fbbf24'; cx.lineWidth=2.5;
+    cx.strokeRect(psx-p.sz, psy-p.sz, p.sz*2, p.sz*2);
+  }
   cx.restore();
+
+  renderBar();
 }
 
 // ─── HUD ──────────────────────────────────────────────────────────────────────
@@ -659,6 +818,25 @@ function updateHUD() {
   document.getElementById('hlv').textContent=p.level;
   document.getElementById('hkl').textContent=p.kills;
   document.getElementById('hms').textContent=S.atks.filter(a=>a.level>=10).length+'/10';
+}
+
+function updateBuffRow() {
+  const row = document.getElementById('buff-row');
+  row.innerHTML='';
+  if (S.buffs.dmg > 0) {
+    const pill = document.createElement('div');
+    pill.className='buff-pill';
+    pill.style.borderColor='#fbbf24'; pill.style.color='#fbbf24';
+    pill.innerHTML=`⚔️ DMG ×1.75 <span class="btimer">${Math.ceil(S.buffs.dmg/1000)}s</span>`;
+    row.appendChild(pill);
+  }
+  if (S.buffs.spd > 0) {
+    const pill = document.createElement('div');
+    pill.className='buff-pill';
+    pill.style.borderColor='#67e8f9'; pill.style.color='#67e8f9';
+    pill.innerHTML=`💨 SPD ×1.6 <span class="btimer">${Math.ceil(S.buffs.spd/1000)}s</span>`;
+    row.appendChild(pill);
+  }
 }
 
 function renderBar() {
@@ -676,6 +854,8 @@ function renderBar() {
       <div class="cooldown-mask" style="height:${cdPct}%"></div>`;
     bar.appendChild(slot);
   }
+  // Buff row update (runs every frame via render)
+  updateBuffRow();
 }
 
 // ─── ENDSCREENS ───────────────────────────────────────────────────────────────
@@ -697,7 +877,6 @@ function restart() {
   document.getElementById('overlay').classList.remove('show');
   S=mkState(); paused=false;
   updateHUD(); renderBar();
-  // First level-up to pick starting attack
   setTimeout(()=>{ S.p.xp=S.p.xpNext; checkXP(); },200);
 }
 
