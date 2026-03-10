@@ -62,7 +62,7 @@ At game start the player picks 1 of 5 random attacks as their **special attack**
 
 ### Progression Flow
 
-On game start: perk selection → passive selection → ultimate selection → starting attack selection (special/E) → game begins.
+On game start: perk selection → passive selection → ultimate selection → special attack selection (E key) → first auto-attack level-up → game begins.
 
 On level-up: attack upgrade/new attack choice. Every 10 levels also queues a perk + passive selection. Mastering an attack (reaching level 10) queues a perk selection. `pendingPerks`/`pendingPassives` track the queue; selections chain via callbacks (e.g., `pickPerk` calls `showPassiveSelection` if pending).
 

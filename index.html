@@ -911,7 +911,9 @@ function pickStartingAttack(id) {
   document.getElementById('start-atk-overlay').classList.remove('show');
   updateSpecialSlot();
   document.getElementById('special-slot').classList.add('active');
-  paused = false;
+  // Trigger first auto-attack level-up selection
+  S.p.xp = S.p.xpNext;
+  checkXP();
 }
 
 function activateSpecial() {
