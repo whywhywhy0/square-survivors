@@ -690,6 +690,10 @@ const BUFFS = [
     desc:'Regenerate 5% of max HP per second for 10 seconds.',
     apply(p)  { p.rBuffRegen = 0.05; },
     remove(p) { p.rBuffRegen = 0; } },
+  { id:'xpbuff',   icon:'⭐',  name:'Scholar',     color:'#c084fc',
+    desc:'Gain 50% more XP from kills for 10 seconds.',
+    apply(p)  { p.rBuffXpMult = 1.5; },
+    remove(p) { p.rBuffXpMult = 1; } },
 ];
 
 // ─── WORLD SIZE ───────────────────────────────────────────────────────────────
@@ -720,6 +724,8 @@ const ITEM_DEFS = {
           desc:'+60% movement speed for 12 seconds.' },
   def:  { icon:'🛡️', color:'#60a5fa', glowColor:'rgba(96,165,250,0.6)', label:'Shield Orb',
           desc:'Reduce damage taken by 60% for 10 seconds.' },
+  xp:   { icon:'⭐', color:'#c084fc', glowColor:'rgba(192,132,252,0.6)', label:'XP Tome',
+          desc:'+50% XP gain for 20 seconds.' },
 };
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -748,13 +754,13 @@ function mkState() {
          chosenUlt:null, ultCharge:0, ultCd:0, mdx:0, mdy:0,
          specialAtk:null, specialCd:0,
          chosenBuff:null, buffActive:false, buffDuration:0, buffCd:0,
-         rBuffDmgMult:1, rBuffShield:0, rBuffSpdMult:1, rBuffRegen:0 },
+         rBuffDmgMult:1, rBuffShield:0, rBuffSpdMult:1, rBuffRegen:0, rBuffXpMult:1 },
     atks: [],
     enemies: [],
     projs: [],
     fxs: [],
     items: [],
-    buffs: { dmg:0, spd:0, def:0 },
+    buffs: { dmg:0, spd:0, def:0, xp:0 },
     pendingPerks: 0,
     pendingPassives: 0,
     perkReason: '',
@@ -769,8 +775,8 @@ function mkState() {
 // ─── ITEM SPAWNING ────────────────────────────────────────────────────────────
 function spawnItem() {
   // If player is low HP, bias toward heal
-  const types = ['heal', 'dmg', 'spd', 'def'];
-  let type = types[Math.floor(Math.random()*4)];
+  const types = ['heal', 'dmg', 'spd', 'def', 'xp'];
+  let type = types[Math.floor(Math.random()*5)];
   if (S.p.hp < S.p.maxHp * 0.35 && Math.random() < 0.65) type = 'heal';
 
   // Spawn within reachable range around player
@@ -803,6 +809,9 @@ function applyItem(type) {
   } else if (type === 'def') {
     S.buffs.def = 10000;
     fx(S,{type:'pickup',x:p.wx,y:p.wy,life:1200,label:'SHIELD -60%!',color:'#60a5fa'});
+  } else if (type === 'xp') {
+    S.buffs.xp = 20000;
+    fx(S,{type:'pickup',x:p.wx,y:p.wy,life:1200,label:'XP ×1.5!',color:'#c084fc'});
   }
   updateBuffRow();
 }
@@ -823,7 +832,7 @@ function spawnEnemy() {
   S.enemies.push({
     x,y, sz:elite?16:10,
     hp:hpBase, maxHp:hpBase,
-    spd:(45 + lv*7 + t*0.5) * (0.8+Math.random()*0.4) * 0.9,
+    spd:45 * (0.8+Math.random()*0.4) * 0.9,
     dmg:(8 + lv*3 + t*0.15) * (elite?2:1) * 0.9 * 0.9,
     xp: elite?45:10,
     slow:1, slowT:0, flash:0, elite,
@@ -837,11 +846,11 @@ function checkXP() {
     p.xp -= p.xpNext;
     p.level++;
     p.xpNext = Math.floor(100 * Math.pow(1.28, p.level-1));
-    p.maxHp += 15;
-    p.hp = Math.min(p.hp+25, p.maxHp);
+    const oldMaxHp = p.maxHp;
+    p.maxHp = Math.ceil(p.maxHp * 1.025);
+    p.hp = Math.min(p.maxHp, p.hp + (p.maxHp - oldMaxHp));
     p.permDmgMult *= 1.025;
     p.dmgReduction = Math.min(0.75, p.dmgReduction + 0.025);
-    p.cdReduction  = Math.min(0.70, p.cdReduction  + 0.05);
     if (p.level % 10 === 0) { S.pendingPerks++; S.pendingPassives++; S.perkReason = `Level ${p.level} milestone`; }
     showLevelUp();
   }
@@ -1243,6 +1252,10 @@ function update(dt) {
     if (S.buffs.def <= 0) { S.buffs.def=0; S.buffs.defShield=0; updateBuffRow(); }
     else S.buffs.defShield = 0.6;
   }
+  if (S.buffs.xp > 0) {
+    S.buffs.xp -= dt*1000;
+    if (S.buffs.xp <= 0) { S.buffs.xp=0; updateBuffRow(); }
+  }
 
   // Enemy spawn
   S.spawnT += dt*1000;
@@ -1336,7 +1349,7 @@ function update(dt) {
 
     // Death
     if (e.hp<=0) {
-      p.xp += e.xp; p.kills++;
+      p.xp += e.xp * (S.buffs.xp > 0 ? 1.5 : 1) * p.rBuffXpMult; p.kills++;
       if (p.passives.lifesteal > 0) {
         const heal = p.passives.lifesteal * 5;
         p.hp = Math.min(p.maxHp, p.hp + heal);
@@ -1774,6 +1787,13 @@ function updateBuffRow() {
     pill.className='buff-pill';
     pill.style.borderColor='#60a5fa'; pill.style.color='#60a5fa';
     pill.innerHTML=`🛡️ SHIELD -60% <span class="btimer">${Math.ceil(S.buffs.def/1000)}s</span>`;
+    row.appendChild(pill);
+  }
+  if (S.buffs.xp > 0) {
+    const pill = document.createElement('div');
+    pill.className='buff-pill';
+    pill.style.borderColor='#c084fc'; pill.style.color='#c084fc';
+    pill.innerHTML=`⭐ XP ×1.5 <span class="btimer">${Math.ceil(S.buffs.xp/1000)}s</span>`;
     row.appendChild(pill);
   }
 }
