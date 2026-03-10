@@ -888,18 +888,15 @@ function pickUlt(id) {
 
 function showStartAttackSelection() {
   paused = true;
-  const pool = [...DEFS];
-  shuffle(pool);
-  const choices = pool.slice(0, 5);
   const cc = document.getElementById('satk-cards');
   cc.innerHTML = '';
-  for (const d of choices) {
+  for (const u of ULTIMATES) {
     const card = document.createElement('div');
     card.className = 'satk-card';
-    card.innerHTML = `<div class="saicon">${d.icon}</div>
-      <div class="saname">${d.name}</div>
-      <div class="sadesc">${d.desc}</div>`;
-    card.onclick = () => pickStartingAttack(d.id);
+    card.innerHTML = `<div class="saicon">${u.icon}</div>
+      <div class="saname">${u.name}</div>
+      <div class="sadesc">${u.desc}</div>`;
+    card.onclick = () => pickStartingAttack(u.id);
     cc.appendChild(card);
   }
   document.getElementById('start-atk-overlay').classList.add('show');
@@ -919,9 +916,8 @@ function pickStartingAttack(id) {
 function activateSpecial() {
   const p = S.p;
   if (p.specialAtk === null || paused || p.specialCd > 0) return;
-  const def = DEFS[p.specialAtk];
-  const level = 1;
-  def.fire(S, level);
+  const ult = ULTIMATES.find(u => u.id === p.specialAtk);
+  ult.activate(S);
   p.specialCd = 5000;
   updateSpecialSlot();
 }
@@ -929,7 +925,7 @@ function activateSpecial() {
 function updateSpecialSlot() {
   const p = S.p;
   if (p.specialAtk === null) return;
-  const def = DEFS[p.specialAtk];
+  const def = ULTIMATES.find(u => u.id === p.specialAtk);
   const ready = p.specialCd <= 0;
   const cdPct = Math.max(0, p.specialCd / 5000 * 100);
   const el = document.getElementById('special-slot');
