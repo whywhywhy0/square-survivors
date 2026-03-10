@@ -648,7 +648,7 @@ function spawnEnemy() {
     x,y, sz:elite?16:10,
     hp:hpBase, maxHp:hpBase,
     spd:(45 + lv*7 + t*0.5) * (0.8+Math.random()*0.4),
-    dmg:(8 + lv*3 + t*0.15) * (elite?2:1),
+    dmg:(8 + lv*3 + t*0.15) * (elite?2:1) * 0.9,
     xp: elite?45:10,
     slow:1, slowT:0, flash:0, elite,
   });
@@ -973,7 +973,7 @@ function update(dt) {
     if (a.id===8) continue;
     const s = DEFS[a.id].stat(a.level);
     a.cd -= dt*1000;
-    if (a.cd <= 0) { DEFS[a.id].fire(S, a.level); a.cd = s.cd * (1 - S.p.cdReduction); }
+    if (a.cd <= 0) { DEFS[a.id].fire(S, a.level); a.cd = s.cd * 0.9 * (1 - S.p.cdReduction); }
   }
 
   // Projectiles
