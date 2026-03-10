@@ -687,8 +687,8 @@ const BUFFS = [
     apply(p)  { p.rBuffSpdMult = 1.5; },
     remove(p) { p.rBuffSpdMult = 1; } },
   { id:'regen',    icon:'💚',  name:'Mending',     color:'#4ade80',
-    desc:'Regenerate 10 HP per second for 10 seconds.',
-    apply(p)  { p.rBuffRegen = 10; },
+    desc:'Regenerate 5% of max HP per second for 10 seconds.',
+    apply(p)  { p.rBuffRegen = 0.05; },
     remove(p) { p.rBuffRegen = 0; } },
 ];
 
@@ -1211,7 +1211,7 @@ function update(dt) {
   // R-buff tick
   if (p.buffActive) {
     p.buffDuration -= dt*1000;
-    if (p.rBuffRegen > 0) p.hp = Math.min(p.maxHp, p.hp + p.rBuffRegen * dt);
+    if (p.rBuffRegen > 0) p.hp = Math.min(p.maxHp, p.hp + p.rBuffRegen * p.maxHp * dt);
     if (p.buffDuration <= 0) {
       p.buffActive = false; p.buffDuration = 0; p.buffCd = 10000;
       const b = BUFFS.find(b => b.id === p.chosenBuff);
