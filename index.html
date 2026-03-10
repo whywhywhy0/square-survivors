@@ -227,6 +227,28 @@ canvas { display:block; }
 }
 .rbtn:hover { transform:translateY(-2px); }
 
+#special-slot {
+  position:fixed; bottom:12px; left:calc(50% - 220px);
+  display:none; z-index:5; pointer-events:none;
+}
+#special-slot.active { display:block; }
+.sslot {
+  width:64px; height:64px;
+  background:rgba(0,0,0,0.75);
+  border:2px solid rgba(249,115,22,0.5);
+  border-radius:10px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+  position:relative; overflow:hidden;
+}
+.sslot.ready { border-color:#f97316; box-shadow:0 0 10px rgba(249,115,22,0.5); }
+.sslot .sicon { font-size:22px; line-height:1; }
+.sslot .sname { font-size:7px; color:#fed7aa; text-align:center; }
+.sslot .skey  { font-size:9px; font-weight:700; color:#f97316; }
+.sslot .cooldown-mask {
+  position:absolute; bottom:0; left:0; right:0;
+  background:rgba(0,0,0,0.6); transition:height .05s linear;
+}
+
 #controls-hint {
   position:fixed; bottom:86px; left:50%; transform:translateX(-50%);
   font-size:12px; color:rgba(255,255,255,0.25); pointer-events:none; z-index:5;
@@ -281,6 +303,7 @@ canvas { display:block; }
   <div class="passive-cards" id="passive-cards"></div>
 </div>
 
+<div id="special-slot"></div>
 <div id="attack-bar"></div>
 <div id="controls-hint">WASD / Arrow Keys to move</div>
 
@@ -604,7 +627,8 @@ function mkState() {
          permDmgMult:1, permSpdMult:1, dmgReduction:0, regenRate:0, cdReduction:0,
          perks:{ power:0, armor:0, agility:0, regen:0, maxhp:0, haste:0 },
          passives:{ lifesteal:0, crit:0, evasion:0 },
-         chosenUlt:null, ultCharge:0, ultCd:0, mdx:0, mdy:0 },
+         chosenUlt:null, ultCharge:0, ultCd:0, mdx:0, mdy:0,
+         specialAtk:null, specialCd:0 },
     atks: [],
     enemies: [],
     projs: [],
@@ -882,10 +906,37 @@ function showStartAttackSelection() {
 }
 
 function pickStartingAttack(id) {
-  S.atks.push({id, level:1, cd:5000});
+  S.p.specialAtk = id;
+  S.p.specialCd = 5000;
   document.getElementById('start-atk-overlay').classList.remove('show');
-  renderBar();
+  updateSpecialSlot();
+  document.getElementById('special-slot').classList.add('active');
   paused = false;
+}
+
+function activateSpecial() {
+  const p = S.p;
+  if (p.specialAtk === null || paused || p.specialCd > 0) return;
+  const def = DEFS[p.specialAtk];
+  const level = 1;
+  def.fire(S, level);
+  p.specialCd = 5000;
+  updateSpecialSlot();
+}
+
+function updateSpecialSlot() {
+  const p = S.p;
+  if (p.specialAtk === null) return;
+  const def = DEFS[p.specialAtk];
+  const ready = p.specialCd <= 0;
+  const cdPct = Math.max(0, p.specialCd / 5000 * 100);
+  const el = document.getElementById('special-slot');
+  el.innerHTML = `<div class="sslot${ready?' ready':''}">
+    <div class="sicon">${def.icon}</div>
+    <div class="sname">${def.name}</div>
+    <div class="skey">${ready ? '★ E' : Math.ceil(p.specialCd/1000)+'s'}</div>
+    <div class="cooldown-mask" style="height:${cdPct}%"></div>
+  </div>`;
 }
 
 function updateUltBar() {
@@ -973,6 +1024,7 @@ function update(dt) {
   p.wy = Math.max(-W/2, Math.min(W/2, p.wy + my*p.spd*p.spdMult*p.permSpdMult*dt));
   if (p.itime>0) p.itime -= dt*1000;
   if (p.ultCd>0){ p.ultCd -= dt*1000; if(p.ultCd<0) p.ultCd=0; updateUltBar(); }
+  if (p.specialCd>0){ p.specialCd -= dt*1000; if(p.specialCd<0) p.specialCd=0; updateSpecialSlot(); }
 
   // Passive HP regen
   if (p.regenRate > 0 && p.hp < p.maxHp) {
@@ -1550,6 +1602,7 @@ function restart() {
   document.getElementById('perk-overlay').classList.remove('show');
   document.getElementById('ult-overlay').classList.remove('show');
   document.getElementById('start-atk-overlay').classList.remove('show');
+  document.getElementById('special-slot').classList.remove('active');
   document.getElementById('ult-bar').classList.remove('active');
   S=mkState(); paused=true;
   updateHUD(); renderBar(); updatePerkBadges();
@@ -1569,6 +1622,7 @@ window.addEventListener('keydown', e=>{
   keys[e.key]=true;
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
   if(e.key===' ') activateUlt();
+  if(e.key==='e'||e.key==='E') activateSpecial();
 });
 window.addEventListener('keyup', e=>{ keys[e.key]=false; });
 

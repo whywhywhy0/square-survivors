@@ -29,8 +29,9 @@ Created by `mkState()`, reset on restart:
 S.p          — player: wx/wy (world position), hp, maxHp, spd, level, xp, kills,
                dmgMult/spdMult (active buff multipliers),
                permDmgMult/permSpdMult/dmgReduction/regenRate/cdReduction (perk stats),
-               perks{}, passives{}, chosenUlt, ultCharge, ultCd, mdx/mdy (last move dir)
-S.atks[]     — active attacks: {id, level, cd}
+               perks{}, passives{}, chosenUlt, ultCharge, ultCd, mdx/mdy (last move dir),
+               specialAtk (attack id or null), specialCd (ms remaining)
+S.atks[]     — active auto-firing attacks: {id, level, cd}
 S.enemies[]  — enemy objects
 S.projs[]    — projectiles
 S.fxs[]      — visual + gameplay effects (shockwave, poison, meteor, particles, etc.)
@@ -55,9 +56,13 @@ World is 3000×3000 (`W = 3000`) centered at (0,0). Player `wx/wy` are world coo
 
 All HUD elements (HP/XP bars, buff pills, attack bar, ultimate bar, overlays) are DOM elements positioned with CSS `position:fixed`. The `<canvas>` renders only the game world. UI updates happen via direct DOM manipulation in `updateHUD()`, `renderBar()`, `updateBuffRow()`, `updateUltBar()`, `updatePerkBadges()`.
 
+### Special Attack (E key)
+
+At game start the player picks 1 of 5 random attacks as their **special attack**, stored in `S.p.specialAtk` (attack id). It does not appear in `S.atks[]` and does not auto-fire. Pressing `E` calls `activateSpecial()`, which fires the attack at level 1 and resets `S.p.specialCd = 5000` (ms). The cooldown ticks in `update()`. The `#special-slot` DOM element renders the slot to the left of the attack bar, showing the icon, a countdown, and a cooldown mask.
+
 ### Progression Flow
 
-On game start: perk selection → passive selection → ultimate selection → first level-up (attack choice).
+On game start: perk selection → passive selection → ultimate selection → starting attack selection (special/E) → game begins.
 
 On level-up: attack upgrade/new attack choice. Every 10 levels also queues a perk + passive selection. Mastering an attack (reaching level 10) queues a perk selection. `pendingPerks`/`pendingPassives` track the queue; selections chain via callbacks (e.g., `pickPerk` calls `showPassiveSelection` if pending).
 
