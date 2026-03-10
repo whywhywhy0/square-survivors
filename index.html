@@ -513,7 +513,7 @@ const PASSIVES = [
 const ULTIMATES = [
   {
     id:'nova', name:'Death Nova', icon:'💀', color:'#f87171',
-    kills:40,
+    kills:30,
     desc:'Massive explosion (radius 600) that annihilates all nearby enemies.',
     activate(S) {
       const R=600;
@@ -523,7 +523,7 @@ const ULTIMATES = [
   },
   {
     id:'timewarp', name:'Time Warp', icon:'⌛', color:'#a78bfa',
-    kills:30,
+    kills:20,
     desc:'Freezes all enemies at 5% speed for 14 seconds.',
     activate(S) {
       for(const e of S.enemies){ e.slow=0.05; e.slowT=14000; }
@@ -532,7 +532,7 @@ const ULTIMATES = [
   },
   {
     id:'storm', name:'Thunder Storm', icon:'🌩️', color:'#fbbf24',
-    kills:36,
+    kills:20,
     desc:'Strikes 30 random enemies with deadly chain lightning bolts.',
     activate(S) {
       const targets=[...S.enemies].sort(()=>Math.random()-.5).slice(0,30);
@@ -544,7 +544,7 @@ const ULTIMATES = [
   },
   {
     id:'rush', name:'Phantom Rush', icon:'👻', color:'#67e8f9',
-    kills:24,
+    kills:20,
     desc:'Dash 450px in your movement direction, phasing through and damaging all enemies.',
     activate(S) {
       const mdx=S.p.mdx||1, mdy=S.p.mdy||0;
@@ -562,7 +562,7 @@ const ULTIMATES = [
   },
   {
     id:'apocalypse', name:'Meteor Rain', icon:'🌠', color:'#fb923c',
-    kills:50,
+    kills:15,
     desc:'Rains 20 devastating meteors onto visible enemies.',
     activate(S) {
       const targets=[...S.enemies].sort(()=>Math.random()-.5).slice(0,20);
