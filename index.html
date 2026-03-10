@@ -64,11 +64,41 @@ canvas { display:block; }
 .perk-card .pstacks { font-size:11px; color:#fbbf24; margin-top:8px; font-weight:600; }
 
 /* Perk stat badges in HUD */
-#perk-badges { display:flex; gap:6px; align-items:center; }
+#perk-badges { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
 .perk-badge {
   font-size:11px; font-weight:700; padding:2px 7px; border-radius:50px;
   background:rgba(251,191,36,0.15); border:1px solid rgba(251,191,36,0.35); color:#fde68a;
 }
+.passive-badge {
+  font-size:11px; font-weight:700; padding:2px 7px; border-radius:50px;
+  background:rgba(52,211,153,0.15); border:1px solid rgba(52,211,153,0.35); color:#6ee7b7;
+}
+
+/* Passive selection overlay */
+#passive-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.92);
+  display:none; flex-direction:column; align-items:center; justify-content:center;
+  gap:22px; z-index:26;
+}
+#passive-overlay.show { display:flex; }
+#passive-overlay h2 {
+  font-size:36px; font-weight:900;
+  background:linear-gradient(135deg,#34d399,#67e8f9);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+}
+#passive-overlay .sub { font-size:13px; color:#888; }
+.passive-cards { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
+.passive-card {
+  width:190px; background:rgba(52,211,153,0.05);
+  border:2px solid rgba(52,211,153,0.2); border-radius:14px;
+  padding:20px 14px; cursor:pointer; text-align:center; transition:all .15s;
+}
+.passive-card:hover { border-color:#34d399; background:rgba(52,211,153,0.12); transform:translateY(-4px);
+  box-shadow:0 8px 28px rgba(52,211,153,0.25); }
+.passive-card .picon { font-size:36px; }
+.passive-card .pname { font-size:15px; font-weight:700; color:#6ee7b7; margin:8px 0 4px; }
+.passive-card .pdesc { font-size:11px; color:#aaa; line-height:1.5; }
+.passive-card .pstacks { font-size:11px; color:#34d399; margin-top:8px; font-weight:600; }
 
 /* Ultimate bar */
 #ult-bar {
@@ -206,7 +236,7 @@ canvas { display:block; }
 
 <div id="ult-overlay">
   <h2>Choose Your Ultimate</h2>
-  <p style="color:#888;font-size:13px">Activate with SPACE — charges by killing enemies — 15s cooldown after use</p>
+  <p style="color:#888;font-size:13px">Activate with SPACE — charges by killing enemies — 10s cooldown after use</p>
   <div class="ult-cards" id="ult-cards"></div>
 </div>
 
@@ -214,6 +244,12 @@ canvas { display:block; }
   <h2>⚡ Milestone Perk</h2>
   <div class="sub" id="perk-sub">Every 10 levels — choose a permanent upgrade</div>
   <div class="perk-cards" id="perk-cards"></div>
+</div>
+
+<div id="passive-overlay">
+  <h2>✨ Passive Ability</h2>
+  <div class="sub" id="passive-sub">Choose a passive to upgrade or acquire</div>
+  <div class="passive-cards" id="passive-cards"></div>
 </div>
 
 <div id="attack-bar"></div>
@@ -272,7 +308,8 @@ const DEFS = [
       let t = nearest(S); if (!t) return;
       const seen = new Set(); let dmg = s.dmg * tdm(S);
       for (let c = 0; c <= s.chains && t; c++) {
-        t.hp -= dmg; t.flash = 150; seen.add(t);
+        const cm = critRoll(S); t.hp -= dmg * cm; t.flash = 150; seen.add(t);
+        if (cm > 1) fx(S,{type:'pickup',x:t.x,y:t.y,life:400,label:'CRIT!',color:'#fbbf24'});
         fx(S,{type:'bolt',x:t.x,y:t.y,life:250});
         let nx=null, nd=s.range;
         for (const e of S.enemies) { if(seen.has(e)) continue; const d=dist(e,t); if(d<nd){nd=d;nx=e;} }
@@ -288,7 +325,7 @@ const DEFS = [
       const s = DEFS[3].stat(l);
       for (const e of S.enemies) {
         if (dist2(e.x,e.y,S.p.wx,S.p.wy) < (s.rad+e.sz)*(s.rad+e.sz)) {
-          e.hp -= s.dmg * tdm(S); e.flash = 100;
+          const cm = critRoll(S); e.hp -= s.dmg * tdm(S) * cm; e.flash = 100;
           fx(S,{type:'hit',x:e.x,y:e.y,life:180,color:'#34d399'});
         }
       }
@@ -401,6 +438,25 @@ const PERKS = [
   },
 ];
 
+// ─── PASSIVE DEFINITIONS ──────────────────────────────────────────────────────
+const PASSIVES = [
+  {
+    id:'lifesteal', icon:'🩸', name:'Lifesteal',
+    getDesc: n => `Heal ${(n+1)*5} HP on each enemy kill.`,
+    badge: n => `🩸 +${n*5}HP/kill`,
+  },
+  {
+    id:'crit', icon:'💥', name:'Critical Hit',
+    getDesc: n => `${10 + n*5}% crit chance → 20% bonus damage.`,
+    badge: n => `💥 ${5+n*5}% crit`,
+  },
+  {
+    id:'evasion', icon:'🌀', name:'Evasion',
+    getDesc: n => `${10 + n*5}% chance to dodge incoming attacks.`,
+    badge: n => `🌀 ${5+n*5}% dodge`,
+  },
+];
+
 // ─── ULTIMATES ────────────────────────────────────────────────────────────────
 const ULTIMATES = [
   {
@@ -502,7 +558,9 @@ const dist2 = (ax,ay,bx,by) => (ax-bx)**2+(ay-by)**2;
 const dist  = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
 const dir   = (ax,ay,bx,by) => { const l=Math.hypot(bx-ax,by-ay)||1; return [(bx-ax)/l,(by-ay)/l]; };
 // total damage multiplier = permanent perk mult × active buff mult
-const tdm   = S => S.p.permDmgMult * S.p.dmgMult;
+const tdm      = S => S.p.permDmgMult * S.p.dmgMult;
+// crit roll: if player has crit passive, chance = 5% + level*5% → returns 1.2 or 1
+const critRoll = S => S.p.passives.crit > 0 && Math.random() < 0.05 + S.p.passives.crit * 0.05 ? 1.2 : 1;
 const proj  = (S,p) => S.projs.push({...p, hits:0, dmg: p.dmg * tdm(S)});
 const fx    = (S,e) => S.fxs.push(e);
 
@@ -516,6 +574,7 @@ function mkState() {
          dmgMult:1, spdMult:1,
          permDmgMult:1, permSpdMult:1, dmgReduction:0, regenRate:0, cdReduction:0,
          perks:{ power:0, armor:0, agility:0, regen:0, maxhp:0, haste:0 },
+         passives:{ lifesteal:0, crit:0, evasion:0 },
          chosenUlt:null, ultCharge:0, ultCd:0, mdx:0, mdy:0 },
     atks: [],
     enemies: [],
@@ -524,6 +583,7 @@ function mkState() {
     items: [],
     buffs: { dmg:0, spd:0 },
     pendingPerks: 0,
+    pendingPassives: 0,
     perkReason: '',
     itemSpawnT: 0,
     itemSpawnI: 18000,
@@ -603,7 +663,7 @@ function checkXP() {
     p.xpNext = Math.floor(100 * Math.pow(1.28, p.level-1));
     p.maxHp += 15;
     p.hp = Math.min(p.hp+25, p.maxHp);
-    if (p.level % 10 === 0) { S.pendingPerks++; S.perkReason = `Level ${p.level} milestone`; }
+    if (p.level % 10 === 0) { S.pendingPerks++; S.pendingPassives++; S.perkReason = `Level ${p.level} milestone`; }
     showLevelUp();
   }
 }
@@ -656,6 +716,7 @@ function pick(ch) {
   renderBar();
   if (S.atks.filter(a=>a.level>=10).length === DEFS.length) { showVictory(); return; }
   if (S.pendingPerks > 0) { S.pendingPerks--; showPerkSelection(); }
+  else if (S.pendingPassives > 0) { S.pendingPassives--; showPassiveSelection(); }
   else paused = false;
 }
 
@@ -694,10 +755,51 @@ function pickPerk(id) {
   updateHUD();
   if (S._perkIsStart) {
     S._perkIsStart = false;
-    showUltSelection();  // chain: perk → ultimate → first attack
+    showPassiveSelection(true);  // chain: perk → passive → ultimate → first attack
   } else {
-    paused = false;
     fx(S,{type:'pickup',x:p.wx,y:p.wy,life:1400,label:`${pk.icon} ${pk.name}!`,color:'#fbbf24'});
+    if (S.pendingPassives > 0) { S.pendingPassives--; showPassiveSelection(); }
+    else paused = false;
+  }
+}
+
+function showPassiveSelection(isStart=false) {
+  paused = true;
+  S._passiveIsStart = isStart;
+  const p = S.p;
+  const el = document.getElementById('passive-overlay').querySelector('h2');
+  el.textContent = isStart ? '✨ Choose Your Starting Passive' : '✨ Passive Upgrade!';
+  document.getElementById('passive-sub').textContent = isStart
+    ? 'Pick a passive ability to begin your run'
+    : 'Upgrade an existing passive or acquire a new one';
+  const cc = document.getElementById('passive-cards');
+  cc.innerHTML = '';
+  for (const pv of PASSIVES) {
+    const stacks = p.passives[pv.id];
+    const card = document.createElement('div');
+    card.className = 'passive-card';
+    card.innerHTML = `<div class="picon">${pv.icon}</div>
+      <div class="pname">${pv.name}</div>
+      <div class="pdesc">${pv.getDesc(stacks)}</div>
+      <div class="pstacks">${isStart ? 'Starting passive' : stacks > 0 ? `Level ${stacks} — upgrade to ${stacks+1}` : 'Not yet acquired'}</div>`;
+    card.onclick = () => pickPassive(pv.id);
+    cc.appendChild(card);
+  }
+  document.getElementById('passive-overlay').classList.add('show');
+}
+
+function pickPassive(id) {
+  const p = S.p;
+  const pv = PASSIVES.find(pv => pv.id === id);
+  p.passives[id]++;
+  document.getElementById('passive-overlay').classList.remove('show');
+  updatePerkBadges();
+  if (S._passiveIsStart) {
+    S._passiveIsStart = false;
+    showUltSelection();  // chain: passive → ultimate → first attack
+  } else {
+    fx(S,{type:'pickup',x:p.wx,y:p.wy,life:1400,label:`${pv.icon} ${pv.name}!`,color:'#34d399'});
+    paused = false;
   }
 }
 
@@ -766,7 +868,7 @@ function activateUlt() {
   if (p.ultCharge < ult.kills || p.ultCd > 0) return;
   ult.activate(S);
   p.ultCharge = 0;
-  p.ultCd = 15000;
+  p.ultCd = 10000;
   fx(S, {type:'pickup', x:p.wx, y:p.wy, life:1400, label:`${ult.icon} ${ult.name}!`, color:ult.color});
   updateUltBar();
 }
@@ -780,6 +882,14 @@ function updatePerkBadges() {
       const b = document.createElement('div');
       b.className = 'perk-badge';
       b.textContent = pk.badge(p.perks[pk.id]);
+      badges.appendChild(b);
+    }
+  }
+  for (const pv of PASSIVES) {
+    if (p.passives[pv.id] > 0) {
+      const b = document.createElement('div');
+      b.className = 'passive-badge';
+      b.textContent = pv.badge(p.passives[pv.id]);
       badges.appendChild(b);
     }
   }
@@ -905,10 +1015,15 @@ function update(dt) {
     e.x += dx*e.spd*e.slow*dt;
     e.y += dy*e.spd*e.slow*dt;
 
-    // Contact damage (reduced by armor perk)
+    // Contact damage (reduced by armor perk, can be dodged by evasion passive)
     if (dist2(e.x,e.y,p.wx,p.wy)<(e.sz+p.sz)**2 && p.itime<=0) {
-      p.hp -= e.dmg * (1 - p.dmgReduction); p.itime=800;
-      if (p.hp<=0) { p.hp=0; updateHUD(); showGameOver(); return; }
+      if (p.passives.evasion > 0 && Math.random() < 0.05 + p.passives.evasion * 0.05) {
+        fx(S,{type:'pickup',x:p.wx,y:p.wy,life:500,label:'DODGE!',color:'#67e8f9'});
+        p.itime = 400;
+      } else {
+        p.hp -= e.dmg * (1 - p.dmgReduction); p.itime=800;
+        if (p.hp<=0) { p.hp=0; updateHUD(); showGameOver(); return; }
+      }
     }
 
     // Death
