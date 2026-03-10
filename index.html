@@ -414,7 +414,8 @@ const DEFS = [
       const s = DEFS[6].stat(l);
       for (const e of S.enemies) {
         e.hp -= s.dmg * tdm(S); e.flash = 200;
-        e.slow = Math.max(0.15, s.slowF); e.slowT = s.slowT;
+        const newSlow = Math.max(0.15, s.slowF);
+        e.slow = Math.min(e.slow, newSlow); e.slowT = Math.max(e.slowT, s.slowT);
       }
       fx(S,{type:'quake',x:S.p.wx,y:S.p.wy,life:600});
     }
