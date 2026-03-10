@@ -56,13 +56,17 @@ World is 3000×3000 (`W = 3000`) centered at (0,0). Player `wx/wy` are world coo
 
 All HUD elements (HP/XP bars, buff pills, attack bar, ultimate bar, overlays) are DOM elements positioned with CSS `position:fixed`. The `<canvas>` renders only the game world. UI updates happen via direct DOM manipulation in `updateHUD()`, `renderBar()`, `updateBuffRow()`, `updateUltBar()`, `updatePerkBadges()`.
 
+### R Buff (R key)
+
+At game start the player picks 1 of 4 buffs from `BUFFS[]`. Pressing `R` calls `activateRBuff()`, which calls `b.apply(p)` and sets `p.buffActive = true`, `p.buffDuration = 10000`. When it expires, `b.remove(p)` is called and `p.buffCd = 10000` starts. The four buffs modify `p.rBuffDmgMult`, `p.rBuffShield`, `p.rBuffSpdMult`, or `p.rBuffRegen` respectively. These fields are factored into `tdm()`, speed, damage-taken, and regen calculations. A `#rbuff-slot` DOM element to the right of the attack bar shows the state. The `def` world item (`ITEM_DEFS.def`) is a separate 60% damage shield pickup tracked via `S.buffs.def`.
+
 ### Special Attack (E key)
 
 At game start the player picks 1 of 5 random attacks as their **special attack**, stored in `S.p.specialAtk` (attack id). It does not appear in `S.atks[]` and does not auto-fire. Pressing `E` calls `activateSpecial()`, which fires the attack at level 1 and resets `S.p.specialCd = 5000` (ms). The cooldown ticks in `update()`. The `#special-slot` DOM element renders the slot to the left of the attack bar, showing the icon, a countdown, and a cooldown mask.
 
 ### Progression Flow
 
-On game start: perk selection → passive selection → ultimate selection → special attack selection (E key) → first auto-attack level-up → game begins.
+On game start: perk → passive → ultimate → buff selection (R key) → special attack selection (E key) → first auto-attack level-up → game begins.
 
 On level-up: attack upgrade/new attack choice. Every 10 levels also queues a perk + passive selection. Mastering an attack (reaching level 10) queues a perk selection. `pendingPerks`/`pendingPassives` track the queue; selections chain via callbacks (e.g., `pickPerk` calls `showPassiveSelection` if pending).
 

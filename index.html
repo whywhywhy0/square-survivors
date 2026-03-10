@@ -141,6 +141,51 @@ canvas { display:block; }
 .ult-card .udesc { font-size:11px; color:#aaa; line-height:1.5; }
 .ult-card .ukills { font-size:11px; font-weight:700; margin-top:8px; }
 
+#buff-select-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.93);
+  display:none; flex-direction:column; align-items:center; justify-content:center;
+  gap:22px; z-index:29;
+}
+#buff-select-overlay.show { display:flex; }
+#buff-select-overlay h2 {
+  font-size:36px; font-weight:900;
+  background:linear-gradient(135deg,#60a5fa,#34d399);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+}
+.bsel-cards { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
+.bsel-card {
+  width:175px; background:rgba(96,165,250,0.04);
+  border:2px solid rgba(96,165,250,0.25); border-radius:14px;
+  padding:20px 14px; cursor:pointer; text-align:center; transition:all .15s;
+}
+.bsel-card:hover { transform:translateY(-4px); box-shadow:0 8px 28px rgba(96,165,250,0.25); }
+.bsel-card .bicon { font-size:36px; }
+.bsel-card .bname { font-size:15px; font-weight:700; color:#bae6fd; margin:8px 0 4px; }
+.bsel-card .bdesc { font-size:11px; color:#aaa; line-height:1.5; }
+
+#rbuff-slot {
+  position:fixed; bottom:12px; left:calc(50% + 180px);
+  display:none; z-index:5; pointer-events:none;
+}
+#rbuff-slot.active { display:block; }
+.rbslot {
+  width:64px; height:64px;
+  background:rgba(0,0,0,0.75);
+  border:2px solid rgba(96,165,250,0.5);
+  border-radius:10px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+  position:relative; overflow:hidden;
+}
+.rbslot.ready  { border-color:#60a5fa; box-shadow:0 0 10px rgba(96,165,250,0.5); }
+.rbslot.active-glow { border-color:#34d399; box-shadow:0 0 14px rgba(52,211,153,0.6); }
+.rbslot .rbicon { font-size:22px; line-height:1; }
+.rbslot .rbname { font-size:7px; color:#bae6fd; text-align:center; }
+.rbslot .rbkey  { font-size:9px; font-weight:700; color:#60a5fa; }
+.rbslot .cooldown-mask {
+  position:absolute; bottom:0; left:0; right:0;
+  background:rgba(0,0,0,0.6); transition:height .05s linear;
+}
+
 #start-atk-overlay {
   position:fixed; inset:0; background:rgba(0,0,0,0.93);
   display:none; flex-direction:column; align-items:center; justify-content:center;
@@ -285,6 +330,12 @@ canvas { display:block; }
   <div class="ult-cards" id="ult-cards"></div>
 </div>
 
+<div id="buff-select-overlay">
+  <h2>🛡️ Choose Your Buff</h2>
+  <p style="color:#888;font-size:13px">Activate with R — 10s duration — 10s cooldown after</p>
+  <div class="bsel-cards" id="bsel-cards"></div>
+</div>
+
 <div id="start-atk-overlay">
   <h2>⚔️ Choose Your Starting Attack</h2>
   <p style="color:#888;font-size:13px">Your weapon for the opening stretch — 5s cooldown to begin</p>
@@ -304,6 +355,7 @@ canvas { display:block; }
 </div>
 
 <div id="special-slot"></div>
+<div id="rbuff-slot"></div>
 <div id="attack-bar"></div>
 <div id="controls-hint">WASD / Arrow Keys to move</div>
 
@@ -620,6 +672,26 @@ const ULTIMATES = [
   },
 ];
 
+// ─── BUFF DEFINITIONS ─────────────────────────────────────────────────────────
+const BUFFS = [
+  { id:'dmgbuff',  icon:'⚔️',  name:'Battle Cry',  color:'#fbbf24',
+    desc:'Boost all damage by 50% for 10 seconds.',
+    apply(p)  { p.rBuffDmgMult = 1.5; },
+    remove(p) { p.rBuffDmgMult = 1; } },
+  { id:'shield',   icon:'🛡️',  name:'Iron Skin',   color:'#60a5fa',
+    desc:'Reduce all damage taken by 50% for 10 seconds.',
+    apply(p)  { p.rBuffShield = 0.5; },
+    remove(p) { p.rBuffShield = 0; } },
+  { id:'haste',    icon:'💨',  name:'Wind Sprint', color:'#34d399',
+    desc:'Boost movement speed by 50% for 10 seconds.',
+    apply(p)  { p.rBuffSpdMult = 1.5; },
+    remove(p) { p.rBuffSpdMult = 1; } },
+  { id:'regen',    icon:'💚',  name:'Mending',     color:'#4ade80',
+    desc:'Regenerate 10 HP per second for 10 seconds.',
+    apply(p)  { p.rBuffRegen = 10; },
+    remove(p) { p.rBuffRegen = 0; } },
+];
+
 // ─── WORLD SIZE ───────────────────────────────────────────────────────────────
 const W = 3000;
 
@@ -646,6 +718,8 @@ const ITEM_DEFS = {
           desc:'+75% damage for 15 seconds.' },
   spd:  { icon:'💨', color:'#67e8f9', glowColor:'rgba(103,232,249,0.6)', label:'Swift Rune',
           desc:'+60% movement speed for 12 seconds.' },
+  def:  { icon:'🛡️', color:'#60a5fa', glowColor:'rgba(96,165,250,0.6)', label:'Shield Orb',
+          desc:'Reduce damage taken by 60% for 10 seconds.' },
 };
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -654,7 +728,7 @@ const dist2 = (ax,ay,bx,by) => (ax-bx)**2+(ay-by)**2;
 const dist  = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
 const dir   = (ax,ay,bx,by) => { const l=Math.hypot(bx-ax,by-ay)||1; return [(bx-ax)/l,(by-ay)/l]; };
 // total damage multiplier = permanent perk mult × active buff mult
-const tdm      = S => S.p.permDmgMult * S.p.dmgMult;
+const tdm      = S => S.p.permDmgMult * S.p.dmgMult * S.p.rBuffDmgMult;
 // crit roll: if player has crit passive, chance = 5% + level*5% → returns 1.2 or 1
 const critRoll = S => S.p.passives.crit > 0 && Math.random() < 0.05 + S.p.passives.crit * 0.05 ? 1.2 : 1;
 const proj  = (S,p) => S.projs.push({...p, hits:0, dmg: p.dmg * tdm(S)});
@@ -672,13 +746,15 @@ function mkState() {
          perks:{ power:0, armor:0, agility:0, regen:0, maxhp:0, haste:0 },
          passives:{ lifesteal:0, crit:0, evasion:0 },
          chosenUlt:null, ultCharge:0, ultCd:0, mdx:0, mdy:0,
-         specialAtk:null, specialCd:0 },
+         specialAtk:null, specialCd:0,
+         chosenBuff:null, buffActive:false, buffDuration:0, buffCd:0,
+         rBuffDmgMult:1, rBuffShield:0, rBuffSpdMult:1, rBuffRegen:0 },
     atks: [],
     enemies: [],
     projs: [],
     fxs: [],
     items: [],
-    buffs: { dmg:0, spd:0 },
+    buffs: { dmg:0, spd:0, def:0 },
     pendingPerks: 0,
     pendingPassives: 0,
     perkReason: '',
@@ -693,8 +769,8 @@ function mkState() {
 // ─── ITEM SPAWNING ────────────────────────────────────────────────────────────
 function spawnItem() {
   // If player is low HP, bias toward heal
-  const types = ['heal', 'dmg', 'spd'];
-  let type = types[Math.floor(Math.random()*3)];
+  const types = ['heal', 'dmg', 'spd', 'def'];
+  let type = types[Math.floor(Math.random()*4)];
   if (S.p.hp < S.p.maxHp * 0.35 && Math.random() < 0.65) type = 'heal';
 
   // Spawn within reachable range around player
@@ -724,6 +800,9 @@ function applyItem(type) {
     p.spdMult = 1.6;
     S.buffs.spd = 12000;
     fx(S,{type:'pickup',x:p.wx,y:p.wy,life:1200,label:'SPEED ×1.6!',color:'#67e8f9'});
+  } else if (type === 'def') {
+    S.buffs.def = 10000;
+    fx(S,{type:'pickup',x:p.wx,y:p.wy,life:1200,label:'SHIELD -60%!',color:'#60a5fa'});
   }
   updateBuffRow();
 }
@@ -927,7 +1006,71 @@ function pickUlt(id) {
   document.getElementById('ult-overlay').classList.remove('show');
   document.getElementById('ult-bar').classList.add('active');
   updateUltBar();
+  showBuffSelection();
+}
+
+function showBuffSelection() {
+  paused = true;
+  const cc = document.getElementById('bsel-cards');
+  cc.innerHTML = '';
+  for (const b of BUFFS) {
+    const card = document.createElement('div');
+    card.className = 'bsel-card';
+    card.style.borderColor = b.color + '55';
+    card.innerHTML = `<div class="bicon">${b.icon}</div>
+      <div class="bname" style="color:${b.color}">${b.name}</div>
+      <div class="bdesc">${b.desc}</div>`;
+    card.onmouseenter = () => card.style.borderColor = b.color;
+    card.onmouseleave = () => card.style.borderColor = b.color + '55';
+    card.onclick = () => pickBuff(b.id);
+    cc.appendChild(card);
+  }
+  document.getElementById('buff-select-overlay').classList.add('show');
+}
+
+function pickBuff(id) {
+  S.p.chosenBuff = id;
+  document.getElementById('buff-select-overlay').classList.remove('show');
+  document.getElementById('rbuff-slot').classList.add('active');
+  updateRBuffSlot();
   showStartAttackSelection();
+}
+
+function activateRBuff() {
+  const p = S.p;
+  if (!p.chosenBuff || paused || p.buffActive || p.buffCd > 0) return;
+  const b = BUFFS.find(b => b.id === p.chosenBuff);
+  p.buffActive = true;
+  p.buffDuration = 10000;
+  b.apply(p);
+  updateRBuffSlot();
+}
+
+function updateRBuffSlot() {
+  const p = S.p;
+  if (!p.chosenBuff) return;
+  const b = BUFFS.find(b => b.id === p.chosenBuff);
+  const el = document.getElementById('rbuff-slot');
+  let cls = 'rbslot';
+  let keyLabel, cdPct = 0;
+  if (p.buffActive) {
+    cls += ' active-glow';
+    keyLabel = Math.ceil(p.buffDuration / 1000) + 's';
+    cdPct = Math.max(0, (1 - p.buffDuration / 10000) * 100);
+  } else if (p.buffCd > 0) {
+    keyLabel = Math.ceil(p.buffCd / 1000) + 's';
+    cdPct = Math.max(0, p.buffCd / 10000 * 100);
+  } else {
+    cls += ' ready';
+    keyLabel = '★ R';
+    cdPct = 0;
+  }
+  el.innerHTML = `<div class="${cls}">
+    <div class="rbicon">${b.icon}</div>
+    <div class="rbname">${b.name}</div>
+    <div class="rbkey" style="color:${b.color}">${keyLabel}</div>
+    <div class="cooldown-mask" style="height:${cdPct}%"></div>
+  </div>`;
 }
 
 function showStartAttackSelection() {
@@ -1057,10 +1200,26 @@ function update(dt) {
   if (keys.ArrowDown||keys.s||keys.S)  my+=1;
   if (mx&&my){mx*=.707;my*=.707;}
   if (mx||my){ p.mdx=mx; p.mdy=my; }  // track last move dir for Phantom Rush
-  p.wx = Math.max(-W/2, Math.min(W/2, p.wx + mx*p.spd*p.spdMult*p.permSpdMult*dt));
-  p.wy = Math.max(-W/2, Math.min(W/2, p.wy + my*p.spd*p.spdMult*p.permSpdMult*dt));
+  p.wx = Math.max(-W/2, Math.min(W/2, p.wx + mx*p.spd*p.spdMult*p.permSpdMult*p.rBuffSpdMult*dt));
+  p.wy = Math.max(-W/2, Math.min(W/2, p.wy + my*p.spd*p.spdMult*p.permSpdMult*p.rBuffSpdMult*dt));
   if (p.itime>0) p.itime -= dt*1000;
   if (p.specialCd>0){ p.specialCd -= dt*1000; if(p.specialCd<0) p.specialCd=0; updateSpecialSlot(); }
+
+  // R-buff tick
+  if (p.buffActive) {
+    p.buffDuration -= dt*1000;
+    if (p.rBuffRegen > 0) p.hp = Math.min(p.maxHp, p.hp + p.rBuffRegen * dt);
+    if (p.buffDuration <= 0) {
+      p.buffActive = false; p.buffDuration = 0; p.buffCd = 10000;
+      const b = BUFFS.find(b => b.id === p.chosenBuff);
+      b.remove(p);
+    }
+    updateRBuffSlot();
+  } else if (p.buffCd > 0) {
+    p.buffCd -= dt*1000;
+    if (p.buffCd < 0) p.buffCd = 0;
+    updateRBuffSlot();
+  }
 
   // Passive HP regen
   if (p.regenRate > 0 && p.hp < p.maxHp) {
@@ -1075,6 +1234,11 @@ function update(dt) {
   if (S.buffs.spd > 0) {
     S.buffs.spd -= dt*1000;
     if (S.buffs.spd <= 0) { S.buffs.spd=0; p.spdMult=1; updateBuffRow(); }
+  }
+  if (S.buffs.def > 0) {
+    S.buffs.def -= dt*1000;
+    if (S.buffs.def <= 0) { S.buffs.def=0; S.buffs.defShield=0; updateBuffRow(); }
+    else S.buffs.defShield = 0.6;
   }
 
   // Enemy spawn
@@ -1162,7 +1326,7 @@ function update(dt) {
         fx(S,{type:'pickup',x:p.wx,y:p.wy,life:500,label:'DODGE!',color:'#67e8f9'});
         p.itime = 400;
       } else {
-        p.hp -= e.dmg * (1 - p.dmgReduction); p.itime=800;
+        p.hp -= e.dmg * (1 - p.dmgReduction - p.rBuffShield - (S.buffs.defShield||0)); p.itime=800;
         if (p.hp<=0) { p.hp=0; updateHUD(); showGameOver(); return; }
       }
     }
@@ -1597,6 +1761,13 @@ function updateBuffRow() {
     pill.innerHTML=`💨 SPD ×1.6 <span class="btimer">${Math.ceil(S.buffs.spd/1000)}s</span>`;
     row.appendChild(pill);
   }
+  if (S.buffs.def > 0) {
+    const pill = document.createElement('div');
+    pill.className='buff-pill';
+    pill.style.borderColor='#60a5fa'; pill.style.color='#60a5fa';
+    pill.innerHTML=`🛡️ SHIELD -60% <span class="btimer">${Math.ceil(S.buffs.def/1000)}s</span>`;
+    row.appendChild(pill);
+  }
 }
 
 function renderBar() {
@@ -1637,8 +1808,10 @@ function restart() {
   document.getElementById('overlay').classList.remove('show');
   document.getElementById('perk-overlay').classList.remove('show');
   document.getElementById('ult-overlay').classList.remove('show');
+  document.getElementById('buff-select-overlay').classList.remove('show');
   document.getElementById('start-atk-overlay').classList.remove('show');
   document.getElementById('special-slot').classList.remove('active');
+  document.getElementById('rbuff-slot').classList.remove('active');
   document.getElementById('ult-bar').classList.remove('active');
   S=mkState(); paused=true;
   updateHUD(); renderBar(); updatePerkBadges();
@@ -1659,6 +1832,7 @@ window.addEventListener('keydown', e=>{
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
   if(e.key===' ') activateUlt();
   if(e.key==='e'||e.key==='E') activateSpecial();
+  if(e.key==='r'||e.key==='R') activateRBuff();
 });
 window.addEventListener('keyup', e=>{ keys[e.key]=false; });
 
