@@ -839,6 +839,9 @@ function checkXP() {
     p.xpNext = Math.floor(100 * Math.pow(1.28, p.level-1));
     p.maxHp += 15;
     p.hp = Math.min(p.hp+25, p.maxHp);
+    p.permDmgMult *= 1.025;
+    p.dmgReduction = Math.min(0.75, p.dmgReduction + 0.025);
+    p.cdReduction  = Math.min(0.70, p.cdReduction  + 0.05);
     if (p.level % 10 === 0) { S.pendingPerks++; S.pendingPassives++; S.perkReason = `Level ${p.level} milestone`; }
     showLevelUp();
   }
@@ -1334,6 +1337,11 @@ function update(dt) {
     // Death
     if (e.hp<=0) {
       p.xp += e.xp; p.kills++;
+      if (p.passives.lifesteal > 0) {
+        const heal = p.passives.lifesteal * 5;
+        p.hp = Math.min(p.maxHp, p.hp + heal);
+        fx(S,{type:'pickup',x:e.x,y:e.y,life:600,label:`+${heal}`,color:'#f87171'});
+      }
       if (p.chosenUlt) { const u=ULTIMATES.find(u=>u.id===p.chosenUlt); if(p.ultCharge<u.kills){p.ultCharge++;updateUltBar();} }
       fx(S,{type:'death',x:e.x,y:e.y,life:350,color:'#ef4444',sz:e.sz});
       S.enemies.splice(i,1);
