@@ -468,6 +468,9 @@ const ULTIMATES = [
   },
 ];
 
+// ─── WORLD SIZE ───────────────────────────────────────────────────────────────
+const W = 3000;
+
 // ─── BACKGROUND DECORATIONS (generated once) ──────────────────────────────────
 const BG_DECORS = (function(){
   const out=[], rng=s=>{let x=Math.sin(s+1)*10000;return x-Math.floor(x);};
@@ -502,7 +505,6 @@ const dir   = (ax,ay,bx,by) => { const l=Math.hypot(bx-ax,by-ay)||1; return [(bx
 const tdm   = S => S.p.permDmgMult * S.p.dmgMult;
 const proj  = (S,p) => S.projs.push({...p, hits:0, dmg: p.dmg * tdm(S)});
 const fx    = (S,e) => S.fxs.push(e);
-const W = 3000;
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let S, keys={}, paused=false, lastT=0;
@@ -1264,7 +1266,7 @@ function renderMinimap() {
   cx.fillStyle = 'rgba(0,0,0,0.72)';
   cx.strokeStyle = 'rgba(255,255,255,0.12)';
   cx.lineWidth = 1;
-  cx.beginPath(); cx.roundRect(mx-1, my-1, MM+2, MM+2, 7); cx.fill(); cx.stroke();
+  cx.fillRect(mx-1, my-1, MM+2, MM+2); cx.strokeRect(mx-1, my-1, MM+2, MM+2);
 
   // Clip to minimap
   cx.beginPath(); cx.rect(mx, my, MM, MM); cx.clip();
