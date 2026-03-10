@@ -514,9 +514,9 @@ const ULTIMATES = [
   {
     id:'nova', name:'Death Nova', icon:'💀', color:'#f87171',
     kills:40,
-    desc:'Massive explosion (radius 300) that annihilates all nearby enemies.',
+    desc:'Massive explosion (radius 600) that annihilates all nearby enemies.',
     activate(S) {
-      const R=300;
+      const R=600;
       for(const e of S.enemies){ if(dist2(e.x,e.y,S.p.wx,S.p.wy)<R*R){ e.hp-=9999; e.flash=500; } }
       fx(S,{type:'ult_nova',x:S.p.wx,y:S.p.wy,life:700,rad:R,color:'#f87171'});
     }
@@ -524,18 +524,18 @@ const ULTIMATES = [
   {
     id:'timewarp', name:'Time Warp', icon:'⌛', color:'#a78bfa',
     kills:30,
-    desc:'Freezes all enemies at 5% speed for 7 seconds.',
+    desc:'Freezes all enemies at 5% speed for 14 seconds.',
     activate(S) {
-      for(const e of S.enemies){ e.slow=0.05; e.slowT=7000; }
-      fx(S,{type:'ult_warp',x:0,y:0,life:7000,color:'#a78bfa'});
+      for(const e of S.enemies){ e.slow=0.05; e.slowT=14000; }
+      fx(S,{type:'ult_warp',x:0,y:0,life:14000,color:'#a78bfa'});
     }
   },
   {
     id:'storm', name:'Thunder Storm', icon:'🌩️', color:'#fbbf24',
     kills:36,
-    desc:'Strikes 15 random enemies with deadly chain lightning bolts.',
+    desc:'Strikes 30 random enemies with deadly chain lightning bolts.',
     activate(S) {
-      const targets=[...S.enemies].sort(()=>Math.random()-.5).slice(0,15);
+      const targets=[...S.enemies].sort(()=>Math.random()-.5).slice(0,30);
       for(const t of targets){ t.hp-=800; t.flash=300;
         fx(S,{type:'bolt',x:t.x,y:t.y,life:350});
         fx(S,{type:'ult_strike',x:t.x,y:t.y,life:500,color:'#fbbf24'});
@@ -557,7 +557,7 @@ const ULTIMATES = [
         const t=Math.max(0,Math.min(1,(px*ddx+py*ddy)/(DIST*DIST)));
         if(dist2(px,py,ddx*t,ddy*t)<80*80){ e.hp-=600; e.flash=300; }
       }
-      S.p.wx=nx; S.p.wy=ny; S.p.itime=1000;
+      S.p.wx=nx; S.p.wy=ny; S.p.itime=3000;
     }
   },
   {
