@@ -141,6 +141,29 @@ canvas { display:block; }
 .ult-card .udesc { font-size:11px; color:#aaa; line-height:1.5; }
 .ult-card .ukills { font-size:11px; font-weight:700; margin-top:8px; }
 
+#start-atk-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.93);
+  display:none; flex-direction:column; align-items:center; justify-content:center;
+  gap:22px; z-index:29;
+}
+#start-atk-overlay.show { display:flex; }
+#start-atk-overlay h2 {
+  font-size:36px; font-weight:900;
+  background:linear-gradient(135deg,#f97316,#fbbf24);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+}
+.satk-cards { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
+.satk-card {
+  width:175px; background:rgba(249,115,22,0.04);
+  border:2px solid rgba(249,115,22,0.25); border-radius:14px;
+  padding:20px 14px; cursor:pointer; text-align:center; transition:all .15s;
+}
+.satk-card:hover { border-color:#f97316; background:rgba(249,115,22,0.12); transform:translateY(-4px);
+  box-shadow:0 8px 28px rgba(249,115,22,0.25); }
+.satk-card .saicon { font-size:38px; }
+.satk-card .saname { font-size:15px; font-weight:700; color:#fed7aa; margin:8px 0 4px; }
+.satk-card .sadesc { font-size:11px; color:#aaa; line-height:1.5; }
+
 #attack-bar {
   position:fixed; bottom:12px; left:50%; transform:translateX(-50%);
   display:flex; gap:8px; z-index:5; pointer-events:none;
@@ -238,6 +261,12 @@ canvas { display:block; }
   <h2>Choose Your Ultimate</h2>
   <p style="color:#888;font-size:13px">Activate with SPACE — charges by killing enemies — 10s cooldown after use</p>
   <div class="ult-cards" id="ult-cards"></div>
+</div>
+
+<div id="start-atk-overlay">
+  <h2>⚔️ Choose Your Starting Attack</h2>
+  <p style="color:#888;font-size:13px">Your weapon for the opening stretch — 5s cooldown to begin</p>
+  <div class="satk-cards" id="satk-cards"></div>
 </div>
 
 <div id="perk-overlay">
@@ -830,9 +859,33 @@ function pickUlt(id) {
   document.getElementById('ult-overlay').classList.remove('show');
   document.getElementById('ult-bar').classList.add('active');
   updateUltBar();
-  // Now show first attack selection
-  S.p.xp = S.p.xpNext;
-  checkXP();
+  showStartAttackSelection();
+}
+
+function showStartAttackSelection() {
+  paused = true;
+  const pool = [...DEFS];
+  shuffle(pool);
+  const choices = pool.slice(0, 5);
+  const cc = document.getElementById('satk-cards');
+  cc.innerHTML = '';
+  for (const d of choices) {
+    const card = document.createElement('div');
+    card.className = 'satk-card';
+    card.innerHTML = `<div class="saicon">${d.icon}</div>
+      <div class="saname">${d.name}</div>
+      <div class="sadesc">${d.desc}</div>`;
+    card.onclick = () => pickStartingAttack(d.id);
+    cc.appendChild(card);
+  }
+  document.getElementById('start-atk-overlay').classList.add('show');
+}
+
+function pickStartingAttack(id) {
+  S.atks.push({id, level:1, cd:5000});
+  document.getElementById('start-atk-overlay').classList.remove('show');
+  renderBar();
+  paused = false;
 }
 
 function updateUltBar() {
@@ -1496,6 +1549,7 @@ function restart() {
   document.getElementById('overlay').classList.remove('show');
   document.getElementById('perk-overlay').classList.remove('show');
   document.getElementById('ult-overlay').classList.remove('show');
+  document.getElementById('start-atk-overlay').classList.remove('show');
   document.getElementById('ult-bar').classList.remove('active');
   S=mkState(); paused=true;
   updateHUD(); renderBar(); updatePerkBadges();
