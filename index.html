@@ -513,7 +513,7 @@ const PASSIVES = [
 const ULTIMATES = [
   {
     id:'nova', name:'Death Nova', icon:'💀', color:'#f87171',
-    kills:20,
+    kills:40,
     desc:'Massive explosion (radius 300) that annihilates all nearby enemies.',
     activate(S) {
       const R=300;
@@ -523,7 +523,7 @@ const ULTIMATES = [
   },
   {
     id:'timewarp', name:'Time Warp', icon:'⌛', color:'#a78bfa',
-    kills:15,
+    kills:30,
     desc:'Freezes all enemies at 5% speed for 7 seconds.',
     activate(S) {
       for(const e of S.enemies){ e.slow=0.05; e.slowT=7000; }
@@ -532,7 +532,7 @@ const ULTIMATES = [
   },
   {
     id:'storm', name:'Thunder Storm', icon:'🌩️', color:'#fbbf24',
-    kills:18,
+    kills:36,
     desc:'Strikes 15 random enemies with deadly chain lightning bolts.',
     activate(S) {
       const targets=[...S.enemies].sort(()=>Math.random()-.5).slice(0,15);
@@ -544,7 +544,7 @@ const ULTIMATES = [
   },
   {
     id:'rush', name:'Phantom Rush', icon:'👻', color:'#67e8f9',
-    kills:12,
+    kills:24,
     desc:'Dash 450px in your movement direction, phasing through and damaging all enemies.',
     activate(S) {
       const mdx=S.p.mdx||1, mdy=S.p.mdy||0;
@@ -562,7 +562,7 @@ const ULTIMATES = [
   },
   {
     id:'apocalypse', name:'Meteor Rain', icon:'🌠', color:'#fb923c',
-    kills:25,
+    kills:50,
     desc:'Rains 20 devastating meteors onto visible enemies.',
     activate(S) {
       const targets=[...S.enemies].sort(()=>Math.random()-.5).slice(0,20);
@@ -942,8 +942,7 @@ function updateUltBar() {
   if (!p.chosenUlt) return;
   const ult = ULTIMATES.find(u => u.id === p.chosenUlt);
   const pct = Math.min(1, p.ultCharge / ult.kills);
-  const cdLeft = Math.ceil(p.ultCd / 1000);
-  const ready = pct >= 1 && p.ultCd <= 0;
+  const ready = pct >= 1;
 
   document.getElementById('ult-icon').textContent = ult.icon;
   document.getElementById('ult-name-label').textContent = ult.name;
@@ -954,9 +953,6 @@ function updateUltBar() {
   if (ready) {
     status.textContent = '★ READY — Press SPACE ★';
     status.style.color = ult.color;
-  } else if (p.ultCd > 0) {
-    status.textContent = `Cooldown: ${cdLeft}s  ·  ${p.ultCharge}/${ult.kills} kills`;
-    status.style.color = '#666';
   } else {
     status.textContent = `${p.ultCharge} / ${ult.kills} kills`;
     status.style.color = '#888';
@@ -967,10 +963,9 @@ function activateUlt() {
   const p = S.p;
   if (!p.chosenUlt || paused) return;
   const ult = ULTIMATES.find(u => u.id === p.chosenUlt);
-  if (p.ultCharge < ult.kills || p.ultCd > 0) return;
+  if (p.ultCharge < ult.kills) return;
   ult.activate(S);
   p.ultCharge = 0;
-  p.ultCd = 10000;
   fx(S, {type:'pickup', x:p.wx, y:p.wy, life:1400, label:`${ult.icon} ${ult.name}!`, color:ult.color});
   updateUltBar();
 }
@@ -1021,7 +1016,6 @@ function update(dt) {
   p.wx = Math.max(-W/2, Math.min(W/2, p.wx + mx*p.spd*p.spdMult*p.permSpdMult*dt));
   p.wy = Math.max(-W/2, Math.min(W/2, p.wy + my*p.spd*p.spdMult*p.permSpdMult*dt));
   if (p.itime>0) p.itime -= dt*1000;
-  if (p.ultCd>0){ p.ultCd -= dt*1000; if(p.ultCd<0) p.ultCd=0; updateUltBar(); }
   if (p.specialCd>0){ p.specialCd -= dt*1000; if(p.specialCd<0) p.specialCd=0; updateSpecialSlot(); }
 
   // Passive HP regen
