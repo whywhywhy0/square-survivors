@@ -64,13 +64,52 @@ canvas { display:block; }
 .perk-card .pstacks { font-size:11px; color:#fbbf24; margin-top:8px; font-weight:600; }
 
 /* Perk stat badges in HUD */
-#perk-badges {
-  display:flex; gap:6px; align-items:center;
-}
+#perk-badges { display:flex; gap:6px; align-items:center; }
 .perk-badge {
   font-size:11px; font-weight:700; padding:2px 7px; border-radius:50px;
   background:rgba(251,191,36,0.15); border:1px solid rgba(251,191,36,0.35); color:#fde68a;
 }
+
+/* Ultimate bar */
+#ult-bar {
+  position:fixed; bottom:86px; left:50%; transform:translateX(-50%);
+  display:none; align-items:center; gap:10px; z-index:5;
+  background:rgba(0,0,0,0.82); border-radius:50px; padding:7px 16px;
+  border:1.5px solid rgba(255,255,255,0.1); pointer-events:none; min-width:300px;
+}
+#ult-bar.active { display:flex; }
+#ult-icon { font-size:24px; line-height:1; }
+#ult-charge-wrap { flex:1; }
+#ult-charge-bg { height:7px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden; margin-bottom:3px; }
+#ult-charge-fill { height:100%; border-radius:4px; width:0%; transition:width .2s; }
+#ult-status { font-size:10px; font-weight:700; text-align:center; letter-spacing:.5px; }
+#ult-name-label { font-size:10px; color:#888; white-space:nowrap; }
+#ult-key { font-size:10px; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.2);
+  border-radius:4px; padding:1px 6px; color:#aaa; font-weight:700; }
+
+/* Ultimate selection overlay */
+#ult-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.93);
+  display:none; flex-direction:column; align-items:center; justify-content:center;
+  gap:22px; z-index:28;
+}
+#ult-overlay.show { display:flex; }
+#ult-overlay h2 {
+  font-size:36px; font-weight:900;
+  background:linear-gradient(135deg,#67e8f9,#a78bfa);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+}
+.ult-cards { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
+.ult-card {
+  width:185px; background:rgba(103,232,249,0.04);
+  border:2px solid rgba(103,232,249,0.2); border-radius:14px;
+  padding:20px 14px; cursor:pointer; text-align:center; transition:all .15s;
+}
+.ult-card:hover { transform:translateY(-4px); box-shadow:0 8px 28px rgba(103,232,249,0.2); }
+.ult-card .uicon { font-size:38px; }
+.ult-card .uname { font-size:15px; font-weight:700; color:#e0f2fe; margin:8px 0 4px; }
+.ult-card .udesc { font-size:11px; color:#aaa; line-height:1.5; }
+.ult-card .ukills { font-size:11px; font-weight:700; margin-top:8px; }
 
 #attack-bar {
   position:fixed; bottom:12px; left:50%; transform:translateX(-50%);
@@ -154,6 +193,22 @@ canvas { display:block; }
   <div id="perk-badges"></div>
 </div>
 <div id="buff-row"></div>
+
+<div id="ult-bar">
+  <div id="ult-icon"></div>
+  <div id="ult-charge-wrap">
+    <div id="ult-charge-bg"><div id="ult-charge-fill"></div></div>
+    <div id="ult-status"></div>
+  </div>
+  <div id="ult-name-label"></div>
+  <div id="ult-key">SPACE</div>
+</div>
+
+<div id="ult-overlay">
+  <h2>Choose Your Ultimate</h2>
+  <p style="color:#888;font-size:13px">Activate with SPACE — charges by killing enemies — 15s cooldown after use</p>
+  <div class="ult-cards" id="ult-cards"></div>
+</div>
 
 <div id="perk-overlay">
   <h2>⚡ Milestone Perk</h2>
@@ -346,6 +401,88 @@ const PERKS = [
   },
 ];
 
+// ─── ULTIMATES ────────────────────────────────────────────────────────────────
+const ULTIMATES = [
+  {
+    id:'nova', name:'Death Nova', icon:'💀', color:'#f87171',
+    kills:20,
+    desc:'Massive explosion (radius 300) that annihilates all nearby enemies.',
+    activate(S) {
+      const R=300;
+      for(const e of S.enemies){ if(dist2(e.x,e.y,S.p.wx,S.p.wy)<R*R){ e.hp-=9999; e.flash=500; } }
+      fx(S,{type:'ult_nova',x:S.p.wx,y:S.p.wy,life:700,rad:R,color:'#f87171'});
+    }
+  },
+  {
+    id:'timewarp', name:'Time Warp', icon:'⌛', color:'#a78bfa',
+    kills:15,
+    desc:'Freezes all enemies at 5% speed for 7 seconds.',
+    activate(S) {
+      for(const e of S.enemies){ e.slow=0.05; e.slowT=7000; }
+      fx(S,{type:'ult_warp',x:0,y:0,life:7000,color:'#a78bfa'});
+    }
+  },
+  {
+    id:'storm', name:'Thunder Storm', icon:'🌩️', color:'#fbbf24',
+    kills:18,
+    desc:'Strikes 15 random enemies with deadly chain lightning bolts.',
+    activate(S) {
+      const targets=[...S.enemies].sort(()=>Math.random()-.5).slice(0,15);
+      for(const t of targets){ t.hp-=800; t.flash=300;
+        fx(S,{type:'bolt',x:t.x,y:t.y,life:350});
+        fx(S,{type:'ult_strike',x:t.x,y:t.y,life:500,color:'#fbbf24'});
+      }
+    }
+  },
+  {
+    id:'rush', name:'Phantom Rush', icon:'👻', color:'#67e8f9',
+    kills:12,
+    desc:'Dash 450px in your movement direction, phasing through and damaging all enemies.',
+    activate(S) {
+      const mdx=S.p.mdx||1, mdy=S.p.mdy||0;
+      const len=Math.hypot(mdx,mdy)||1;
+      const DIST=450, nx=S.p.wx+(mdx/len)*DIST, ny=S.p.wy+(mdy/len)*DIST;
+      fx(S,{type:'ult_dash',x:S.p.wx,y:S.p.wy,tx:nx,ty:ny,life:350,color:'#67e8f9'});
+      for(const e of S.enemies){
+        const px=e.x-S.p.wx, py=e.y-S.p.wy;
+        const ddx=(mdx/len)*DIST, ddy=(mdy/len)*DIST;
+        const t=Math.max(0,Math.min(1,(px*ddx+py*ddy)/(DIST*DIST)));
+        if(dist2(px,py,ddx*t,ddy*t)<80*80){ e.hp-=600; e.flash=300; }
+      }
+      S.p.wx=nx; S.p.wy=ny; S.p.itime=1000;
+    }
+  },
+  {
+    id:'apocalypse', name:'Meteor Rain', icon:'🌠', color:'#fb923c',
+    kills:25,
+    desc:'Rains 20 devastating meteors onto visible enemies.',
+    activate(S) {
+      const targets=[...S.enemies].sort(()=>Math.random()-.5).slice(0,20);
+      for(let i=0;i<targets.length;i++){
+        const t=targets[i];
+        const delay=i*80;
+        fx(S,{type:'meteor',x:t.x+(Math.random()-.5)*60,y:t.y+(Math.random()-.5)*60,
+               life:900+delay,total:900+delay,rad:65,dmg:900*tdm(S),done:false});
+      }
+    }
+  },
+];
+
+// ─── BACKGROUND DECORATIONS (generated once) ──────────────────────────────────
+const BG_DECORS = (function(){
+  const out=[], rng=s=>{let x=Math.sin(s+1)*10000;return x-Math.floor(x);};
+  for(let i=0;i<700;i++){
+    out.push({
+      x:(rng(i*7.391)-.5)*W, y:(rng(i*5.173)-.5)*W,
+      type:Math.floor(rng(i*3.742)*5),
+      sz:6+rng(i*2.314)*35, rot:rng(i*1.937)*Math.PI*2,
+      alpha:0.25+rng(i*0.823)*0.45,
+      c:Math.floor(rng(i*4.11)*3),
+    });
+  }
+  return out;
+})();
+
 // ─── ITEM DEFINITIONS ─────────────────────────────────────────────────────────
 const ITEM_DEFS = {
   heal: { icon:'❤️', color:'#f87171', glowColor:'rgba(248,113,113,0.6)', label:'Healing Orb',
@@ -376,7 +513,8 @@ function mkState() {
          level:1,xp:0,xpNext:100,kills:0,
          dmgMult:1, spdMult:1,
          permDmgMult:1, permSpdMult:1, dmgReduction:0, regenRate:0, cdReduction:0,
-         perks:{ power:0, armor:0, agility:0, regen:0, maxhp:0, haste:0 } },
+         perks:{ power:0, armor:0, agility:0, regen:0, maxhp:0, haste:0 },
+         chosenUlt:null, ultCharge:0, ultCd:0, mdx:0, mdy:0 },
     atks: [],
     enemies: [],
     projs: [],
@@ -554,13 +692,81 @@ function pickPerk(id) {
   updateHUD();
   if (S._perkIsStart) {
     S._perkIsStart = false;
-    // Now show first attack selection
-    S.p.xp = S.p.xpNext;
-    checkXP();
+    showUltSelection();  // chain: perk → ultimate → first attack
   } else {
     paused = false;
     fx(S,{type:'pickup',x:p.wx,y:p.wy,life:1400,label:`${pk.icon} ${pk.name}!`,color:'#fbbf24'});
   }
+}
+
+function showUltSelection() {
+  paused = true;
+  const cc = document.getElementById('ult-cards');
+  cc.innerHTML = '';
+  for (const u of ULTIMATES) {
+    const card = document.createElement('div');
+    card.className = 'ult-card';
+    card.style.borderColor = u.color + '55';
+    card.innerHTML = `<div class="uicon">${u.icon}</div>
+      <div class="uname" style="color:${u.color}">${u.name}</div>
+      <div class="udesc">${u.desc}</div>
+      <div class="ukills" style="color:${u.color}">⚡ ${u.kills} kills to charge</div>`;
+    card.onmouseenter = () => card.style.borderColor = u.color;
+    card.onmouseleave = () => card.style.borderColor = u.color + '55';
+    card.onclick = () => pickUlt(u.id);
+    cc.appendChild(card);
+  }
+  document.getElementById('ult-overlay').classList.add('show');
+}
+
+function pickUlt(id) {
+  S.p.chosenUlt = id;
+  S.p.ultCharge = 0;
+  S.p.ultCd = 0;
+  document.getElementById('ult-overlay').classList.remove('show');
+  document.getElementById('ult-bar').classList.add('active');
+  updateUltBar();
+  // Now show first attack selection
+  S.p.xp = S.p.xpNext;
+  checkXP();
+}
+
+function updateUltBar() {
+  const p = S.p;
+  if (!p.chosenUlt) return;
+  const ult = ULTIMATES.find(u => u.id === p.chosenUlt);
+  const pct = Math.min(1, p.ultCharge / ult.kills);
+  const cdLeft = Math.ceil(p.ultCd / 1000);
+  const ready = pct >= 1 && p.ultCd <= 0;
+
+  document.getElementById('ult-icon').textContent = ult.icon;
+  document.getElementById('ult-name-label').textContent = ult.name;
+  const fill = document.getElementById('ult-charge-fill');
+  fill.style.width = (pct * 100) + '%';
+  fill.style.background = ready ? ult.color : `${ult.color}88`;
+  const status = document.getElementById('ult-status');
+  if (ready) {
+    status.textContent = '★ READY — Press SPACE ★';
+    status.style.color = ult.color;
+  } else if (p.ultCd > 0) {
+    status.textContent = `Cooldown: ${cdLeft}s  ·  ${p.ultCharge}/${ult.kills} kills`;
+    status.style.color = '#666';
+  } else {
+    status.textContent = `${p.ultCharge} / ${ult.kills} kills`;
+    status.style.color = '#888';
+  }
+}
+
+function activateUlt() {
+  const p = S.p;
+  if (!p.chosenUlt || paused) return;
+  const ult = ULTIMATES.find(u => u.id === p.chosenUlt);
+  if (p.ultCharge < ult.kills || p.ultCd > 0) return;
+  ult.activate(S);
+  p.ultCharge = 0;
+  p.ultCd = 15000;
+  fx(S, {type:'pickup', x:p.wx, y:p.wy, life:1400, label:`${ult.icon} ${ult.name}!`, color:ult.color});
+  updateUltBar();
 }
 
 function updatePerkBadges() {
@@ -597,9 +803,11 @@ function update(dt) {
   if (keys.ArrowUp||keys.w||keys.W)    my-=1;
   if (keys.ArrowDown||keys.s||keys.S)  my+=1;
   if (mx&&my){mx*=.707;my*=.707;}
+  if (mx||my){ p.mdx=mx; p.mdy=my; }  // track last move dir for Phantom Rush
   p.wx = Math.max(-W/2, Math.min(W/2, p.wx + mx*p.spd*p.spdMult*p.permSpdMult*dt));
   p.wy = Math.max(-W/2, Math.min(W/2, p.wy + my*p.spd*p.spdMult*p.permSpdMult*dt));
   if (p.itime>0) p.itime -= dt*1000;
+  if (p.ultCd>0){ p.ultCd -= dt*1000; if(p.ultCd<0) p.ultCd=0; updateUltBar(); }
 
   // Passive HP regen
   if (p.regenRate > 0 && p.hp < p.maxHp) {
@@ -704,6 +912,7 @@ function update(dt) {
     // Death
     if (e.hp<=0) {
       p.xp += e.xp; p.kills++;
+      if (p.chosenUlt) { const u=ULTIMATES.find(u=>u.id===p.chosenUlt); if(p.ultCharge<u.kills){p.ultCharge++;updateUltBar();} }
       fx(S,{type:'death',x:e.x,y:e.y,life:350,color:'#ef4444',sz:e.sz});
       S.enemies.splice(i,1);
       checkXP();
@@ -759,21 +968,61 @@ const cx = cv.getContext('2d');
 
 function ws(wx,wy){ return [wx-S.p.wx+cv.width/2, wy-S.p.wy+cv.height/2]; }
 
-function render() {
-  const W2=cv.width, H2=cv.height;
-  cx.clearRect(0,0,W2,H2);
+function renderBackground() {
+  const W2=cv.width, H2=cv.height, p=S.p;
+  // Base
+  cx.fillStyle='#07070f'; cx.fillRect(0,0,W2,H2);
 
-  // Grid
-  const p=S.p;
-  cx.strokeStyle='rgba(255,255,255,0.04)'; cx.lineWidth=1;
+  // Draw decorations
+  const COLORS=[['#141222','#1a1830'],['#0d150d','#0a180a'],['#10100a','#181810']];
+  for(const d of BG_DECORS){
+    const [sx,sy]=ws(d.x,d.y);
+    if(sx<-60||sx>W2+60||sy<-60||sy>H2+60) continue;
+    cx.save(); cx.translate(sx,sy); cx.rotate(d.rot); cx.globalAlpha=d.alpha;
+    const cc=COLORS[d.c]||COLORS[0];
+    if(d.type===0){ // stone slab
+      cx.fillStyle=cc[0]; cx.fillRect(-d.sz*.5,-d.sz*.3,d.sz,d.sz*.6);
+      cx.fillStyle=cc[1]; cx.fillRect(-d.sz*.3,-d.sz*.18,d.sz*.6,d.sz*.36);
+    } else if(d.type===1){ // moss patch
+      cx.fillStyle='#0a1a0a';
+      cx.beginPath(); cx.ellipse(0,0,d.sz,d.sz*.4,0,0,Math.PI*2); cx.fill();
+    } else if(d.type===2){ // rune circle
+      cx.strokeStyle='rgba(90,70,140,0.5)'; cx.lineWidth=1;
+      cx.beginPath(); cx.arc(0,0,d.sz,0,Math.PI*2); cx.stroke();
+      cx.beginPath(); cx.arc(0,0,d.sz*.55,0,Math.PI*2); cx.stroke();
+      for(let k=0;k<6;k++){
+        const a=k*Math.PI/3;
+        cx.beginPath(); cx.moveTo(Math.cos(a)*d.sz*.55,Math.sin(a)*d.sz*.55);
+        cx.lineTo(Math.cos(a)*d.sz,Math.sin(a)*d.sz); cx.stroke();
+      }
+    } else if(d.type===3){ // void crack
+      cx.strokeStyle='rgba(40,20,60,0.6)'; cx.lineWidth=1.5;
+      cx.beginPath(); cx.moveTo(-d.sz*.5,0); cx.lineTo(d.sz*.5,d.sz*.15);
+      cx.moveTo(-d.sz*.2,-d.sz*.1); cx.lineTo(d.sz*.3,d.sz*.25); cx.stroke();
+    } else { // bone/rubble
+      cx.fillStyle=cc[0];
+      cx.fillRect(-d.sz*.4,-d.sz*.15,d.sz*.8,d.sz*.3);
+      cx.fillRect(-d.sz*.15,-d.sz*.4,d.sz*.3,d.sz*.8);
+    }
+    cx.globalAlpha=1; cx.restore();
+  }
+
+  // Subtle grid overlay
+  cx.strokeStyle='rgba(255,255,255,0.025)'; cx.lineWidth=1;
   const gx=(W2/2-p.wx)%60, gy=(H2/2-p.wy)%60;
   for(let x=((gx%60)+60)%60;x<W2;x+=60){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H2);cx.stroke();}
   for(let y=((gy%60)+60)%60;y<H2;y+=60){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W2,y);cx.stroke();}
 
   // World border
-  const [tx,ty]=ws(-W/2,-W/2), [bx,by]=ws(W/2,W/2);
-  cx.strokeStyle='rgba(255,60,60,0.35)'; cx.lineWidth=3;
+  const [tx,ty]=ws(-W/2,-W/2),[bx,by]=ws(W/2,W/2);
+  cx.strokeStyle='rgba(255,50,50,0.35)'; cx.lineWidth=3;
   cx.strokeRect(tx,ty,bx-tx,by-ty);
+}
+
+function render() {
+  const W2=cv.width, H2=cv.height;
+  renderBackground();
+  const p=S.p;
 
   // ── Items ──
   for (const item of S.items) {
@@ -864,6 +1113,38 @@ function render() {
       let lx=sx+(Math.random()-.5)*20, ly=sy-30; cx.moveTo(lx,ly);
       for(let s=0;s<5;s++){lx+=(Math.random()-.5)*16;ly+=60/5;cx.lineTo(lx,ly);}
       cx.stroke(); cx.restore();
+    }
+    // ── Ultimate effects ──
+    if (e.type==='ult_nova') {
+      const prog = 1-e.life/700;
+      const r = e.rad*prog;
+      cx.save();
+      cx.beginPath(); cx.arc(sx,sy,r,0,Math.PI*2);
+      cx.fillStyle=`rgba(248,113,113,${(1-prog)*0.35})`; cx.fill();
+      cx.strokeStyle=`rgba(248,113,113,${1-prog})`; cx.lineWidth=4; cx.stroke();
+      cx.shadowColor='#f87171'; cx.shadowBlur=30; cx.stroke();
+      cx.restore();
+    }
+    if (e.type==='ult_warp') {
+      // Full-screen tint (world-independent, just use screen coords)
+      cx.save();
+      cx.globalAlpha = Math.min(0.12, e.life/7000*0.12);
+      cx.fillStyle='#a78bfa'; cx.fillRect(0,0,cv.width,cv.height);
+      cx.restore();
+    }
+    if (e.type==='ult_strike') {
+      const a=e.life/500;
+      cx.save(); cx.fillStyle=e.color; cx.shadowColor=e.color; cx.shadowBlur=20; cx.globalAlpha=a;
+      cx.beginPath(); cx.arc(sx,sy,18*a,0,Math.PI*2); cx.fill();
+      cx.restore();
+    }
+    if (e.type==='ult_dash') {
+      const [tsx,tsy]=ws(e.tx,e.ty);
+      const a=e.life/350;
+      cx.save(); cx.globalAlpha=a;
+      cx.strokeStyle=e.color; cx.lineWidth=8; cx.shadowColor=e.color; cx.shadowBlur=20;
+      cx.beginPath(); cx.moveTo(sx,sy); cx.lineTo(tsx,tsy); cx.stroke();
+      cx.restore();
     }
     // Pickup floating text
     if (e.type==='pickup') {
@@ -1097,6 +1378,8 @@ function restart() {
   document.getElementById('victory').classList.remove('show');
   document.getElementById('overlay').classList.remove('show');
   document.getElementById('perk-overlay').classList.remove('show');
+  document.getElementById('ult-overlay').classList.remove('show');
+  document.getElementById('ult-bar').classList.remove('active');
   S=mkState(); paused=true;
   updateHUD(); renderBar(); updatePerkBadges();
   setTimeout(()=>{ showPerkSelection(true); }, 150);
@@ -1111,8 +1394,12 @@ function loop(ts) {
 
 function resize() { cv.width=innerWidth; cv.height=innerHeight; }
 window.addEventListener('resize', resize);
-window.addEventListener('keydown', e=>{ keys[e.key]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); });
-window.addEventListener('keyup',   e=>{ keys[e.key]=false; });
+window.addEventListener('keydown', e=>{
+  keys[e.key]=true;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  if(e.key===' ') activateUlt();
+});
+window.addEventListener('keyup', e=>{ keys[e.key]=false; });
 
 resize();
 S=mkState();
