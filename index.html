@@ -515,6 +515,7 @@ const ULTIMATES = [
     id:'nova', name:'Death Nova', icon:'💀', color:'#f87171',
     kills:30,
     desc:'Massive explosion (radius 600) that annihilates all nearby enemies.',
+    weakDesc:'Small explosion (radius 200) dealing 400 damage to nearby enemies.',
     activate(S) {
       const R=600;
       for(const e of S.enemies){ if(dist2(e.x,e.y,S.p.wx,S.p.wy)<R*R){ e.hp-=9999; e.flash=500; } }
@@ -530,6 +531,7 @@ const ULTIMATES = [
     id:'timewarp', name:'Time Warp', icon:'⌛', color:'#a78bfa',
     kills:20,
     desc:'Freezes all enemies at 5% speed for 14 seconds.',
+    weakDesc:'Slows all enemies to 40% speed for 4 seconds.',
     activate(S) {
       for(const e of S.enemies){ e.slow=0.05; e.slowT=14000; }
       fx(S,{type:'ult_warp',x:0,y:0,life:14000,color:'#a78bfa'});
@@ -543,6 +545,7 @@ const ULTIMATES = [
     id:'storm', name:'Thunder Storm', icon:'🌩️', color:'#fbbf24',
     kills:20,
     desc:'Strikes 30 random enemies with deadly chain lightning bolts.',
+    weakDesc:'Strikes 8 random enemies with lightning for 250 damage each.',
     activate(S) {
       const targets=[...S.enemies].sort(()=>Math.random()-.5).slice(0,30);
       for(const t of targets){ t.hp-=800; t.flash=300;
@@ -562,6 +565,7 @@ const ULTIMATES = [
     id:'rush', name:'Phantom Rush', icon:'👻', color:'#67e8f9',
     kills:20,
     desc:'Dash 450px in your movement direction, phasing through and damaging all enemies.',
+    weakDesc:'Dash 200px through enemies for 200 damage with 1 second of invincibility.',
     activate(S) {
       const mdx=S.p.mdx||1, mdy=S.p.mdy||0;
       const len=Math.hypot(mdx,mdy)||1;
@@ -593,6 +597,7 @@ const ULTIMATES = [
     id:'apocalypse', name:'Meteor Rain', icon:'🌠', color:'#fb923c',
     kills:15,
     desc:'Rains 20 devastating meteors onto visible enemies.',
+    weakDesc:'Drops 5 meteors onto enemies for 250 damage each.',
     activate(S) {
       const targets=[...S.enemies].sort(()=>Math.random()-.5).slice(0,20);
       for(let i=0;i<targets.length;i++){
@@ -933,7 +938,7 @@ function showStartAttackSelection() {
     card.className = 'satk-card';
     card.innerHTML = `<div class="saicon">${u.icon}</div>
       <div class="saname">${u.name}</div>
-      <div class="sadesc">${u.desc}</div>`;
+      <div class="sadesc">${u.weakDesc}</div>`;
     card.onclick = () => pickStartingAttack(u.id);
     cc.appendChild(card);
   }
