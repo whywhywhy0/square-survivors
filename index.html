@@ -560,6 +560,11 @@ const PASSIVES = [
     getDesc: n => `${10 + n*5}% chance to dodge incoming attacks.`,
     badge: n => `🌀 ${5+n*5}% dodge`,
   },
+  {
+    id:'wisdom', icon:'📚', name:'Wisdom',
+    getDesc: n => `Gain ${(n+1)*50}% more XP from kills.`,
+    badge: n => `📚 +${n*50}% XP`,
+  },
 ];
 
 // ─── ULTIMATES ────────────────────────────────────────────────────────────────
@@ -750,7 +755,7 @@ function mkState() {
          dmgMult:1, spdMult:1,
          permDmgMult:1, permSpdMult:1, dmgReduction:0, regenRate:0, cdReduction:0,
          perks:{ power:0, armor:0, agility:0, regen:0, maxhp:0, haste:0 },
-         passives:{ lifesteal:0, crit:0, evasion:0 },
+         passives:{ lifesteal:0, crit:0, evasion:0, wisdom:0 },
          chosenUlt:null, ultCharge:0, ultCd:0, mdx:0, mdy:0,
          specialAtk:null, specialCd:0,
          chosenBuff:null, buffActive:false, buffDuration:0, buffCd:0,
@@ -1349,7 +1354,7 @@ function update(dt) {
 
     // Death
     if (e.hp<=0) {
-      p.xp += e.xp * (S.buffs.xp > 0 ? 1.5 : 1) * p.rBuffXpMult; p.kills++;
+      p.xp += e.xp * (S.buffs.xp > 0 ? 1.5 : 1) * p.rBuffXpMult * (1 + p.passives.wisdom * 0.5); p.kills++;
       if (p.passives.lifesteal > 0) {
         const heal = p.passives.lifesteal * 5;
         p.hp = Math.min(p.maxHp, p.hp + heal);
